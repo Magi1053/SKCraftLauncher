@@ -12,6 +12,7 @@ import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.*;
 import com.skcraft.launcher.util.SharedLocale;
+import com.google.common.base.Strings;
 import lombok.NonNull;
 import net.miginfocom.swing.MigLayout;
 
@@ -28,6 +29,8 @@ public class ConfigurationDialog extends JDialog {
     private final Configuration config;
     private final Launcher launcher;
     private final ObjectSwingMapper mapper;
+    private final String originalGameKey;
+    private boolean gameKeyChanged;
 
     private final JPanel tabContainer = new JPanel(new BorderLayout());
     private final JTabbedPane tabbedPane = new JTabbedPane();
@@ -52,7 +55,7 @@ public class ConfigurationDialog extends JDialog {
     /**
      * Create a new configuration dialog.
      *
-     * @param owner the window owner
+     * @param owner    the window owner
      * @param launcher the launcher
      */
     public ConfigurationDialog(Window owner, @NonNull Launcher launcher) {
@@ -60,6 +63,7 @@ public class ConfigurationDialog extends JDialog {
 
         this.config = launcher.getConfig();
         this.launcher = launcher;
+        this.originalGameKey = Strings.nullToEmpty(config.getGameKey());
         mapper = new ObjectSwingMapper(config);
 
         setTitle(SharedLocale.tr("options.title"));
@@ -217,8 +221,18 @@ public class ConfigurationDialog extends JDialog {
      */
     public void save() {
         mapper.copyFromSwing();
+        gameKeyChanged = !originalGameKey.equals(Strings.nullToEmpty(config.getGameKey()));
 
         Persistence.commitAndForget(config);
         dispose();
+    }
+
+    /**
+     * Whether the game key was changed when the dialog was last saved.
+     *
+     * @return true if the game key changed on save
+     */
+    public boolean isGameKeyChanged() {
+        return gameKeyChanged;
     }
 }

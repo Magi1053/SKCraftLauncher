@@ -22,6 +22,8 @@ import lombok.extern.java.Log;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import java.awt.*;
@@ -32,6 +34,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.lang.ref.WeakReference;
+import java.net.URL;
 
 import static com.skcraft.launcher.util.SharedLocale.tr;
 
@@ -50,6 +53,7 @@ public class LauncherFrame extends JFrame {
     private final JScrollPane instanceScroll = new JScrollPane(instancesTable);
     private WebpagePanel webView;
     private JSplitPane splitPane;
+    private URL lastLoggedNewsUrl;
     private final JButton launchButton = new JButton(SharedLocale.tr("launcher.launch"));
     private final JButton refreshButton = new JButton(SharedLocale.tr("launcher.checkForUpdates"));
     private final JButton optionsButton = new JButton(SharedLocale.tr("launcher.options"));
@@ -120,8 +124,17 @@ public class LauncherFrame extends JFrame {
         instancesModel.addTableModelListener(new TableModelListener() {
             @Override
             public void tableChanged(TableModelEvent e) {
-                if (instancesTable.getRowCount() > 0) {
+                if (instancesTable.getRowCount() > 0 && instancesTable.getSelectedRow() < 0) {
                     instancesTable.setRowSelectionInterval(0, 0);
+                }
+            }
+        });
+
+        instancesTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+            @Override
+            public void valueChanged(ListSelectionEvent e) {
+                if (!e.getValueIsAdjusting() && instancesTable.getSelectedRow() >= 0) {
+                    updateNewsPanel();
                 }
             }
         });
@@ -133,7 +146,6 @@ public class LauncherFrame extends JFrame {
             public void actionPerformed(ActionEvent e) {
                 loadInstances();
                 launcher.getUpdateManager().checkForUpdate(LauncherFrame.this);
-                webView.browse(launcher.getNewsURL(), false);
             }
         });
 
@@ -182,16 +194,65 @@ public class LauncherFrame extends JFrame {
      * @return the news panel
      */
     protected WebpagePanel createNewsPanel() {
-        return WebpagePanel.forURL(launcher.getNewsURL(), false);
+        return new WebpagePanel();
+    }
+
+    private void updateNewsPanel() {
+        updateNewsPanel(false);
+    }
+
+    private void updateNewsPanel(boolean forceReload) {
+        Instance instance = getSelectedInstance();
+        if (instance == null) {
+            return;
+        }
+        URL newsUrl = launcher.getNewsURL(instance);
+        if (!newsUrl.equals(lastLoggedNewsUrl)) {
+            log.info("Loading news from " + newsUrl);
+            lastLoggedNewsUrl = newsUrl;
+        }
+        webView.browse(newsUrl, !forceReload);
+    }
+
+    private Instance getSelectedInstance() {
+        int selectedRow = instancesTable.getSelectedRow();
+        if (selectedRow < 0) {
+            return null;
+        }
+
+        int modelRow = instancesTable.convertRowIndexToModel(selectedRow);
+        if (modelRow < 0 || modelRow >= launcher.getInstances().size()) {
+            return null;
+        }
+
+        return launcher.getInstances().get(modelRow);
+    }
+
+    private void restoreInstanceSelection(String selectedName) {
+        if (selectedName != null) {
+            for (int i = 0; i < launcher.getInstances().size(); i++) {
+                if (launcher.getInstances().get(i).getName().equalsIgnoreCase(selectedName)) {
+                    int viewRow = instancesTable.convertRowIndexToView(i);
+                    if (viewRow >= 0) {
+                        instancesTable.setRowSelectionInterval(viewRow, viewRow);
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (instancesTable.getRowCount() > 0 && instancesTable.getSelectedRow() < 0) {
+            instancesTable.setRowSelectionInterval(0, 0);
+        }
     }
 
     /**
      * Popup the menu for the instances.
      *
      * @param component the component
-     * @param x mouse X
-     * @param y mouse Y
-     * @param selected the selected instance, possibly null
+     * @param x         mouse X
+     * @param y         mouse Y
+     * @param selected  the selected instance, possibly null
      */
     private void popupInstanceMenu(Component component, int x, int y, final Instance selected) {
         JPopupMenu popup = new JPopupMenu();
@@ -315,7 +376,8 @@ public class LauncherFrame extends JFrame {
     }
 
     private void confirmHardUpdate(Instance instance) {
-        if (!SwingHelper.confirmDialog(this, SharedLocale.tr("instance.confirmHardUpdate"), SharedLocale.tr("confirmTitle"))) {
+        if (!SwingHelper.confirmDialog(this, SharedLocale.tr("instance.confirmHardUpdate"),
+                SharedLocale.tr("confirmTitle"))) {
             return;
         }
 
@@ -337,21 +399,30 @@ public class LauncherFrame extends JFrame {
         future.addListener(new Runnable() {
             @Override
             public void run() {
-                instancesModel.update();
-                if (instancesTable.getRowCount() > 0) {
-                    instancesTable.setRowSelectionInterval(0, 0);
+                String selectedName = null;
+                Instance selected = getSelectedInstance();
+                if (selected != null) {
+                    selectedName = selected.getName();
                 }
+
+                instancesModel.update();
+                restoreInstanceSelection(selectedName);
+                updateNewsPanel(true);
                 requestFocus();
             }
         }, SwingExecutor.INSTANCE);
 
-        ProgressDialog.showProgress(this, future, SharedLocale.tr("launcher.checkingTitle"), SharedLocale.tr("launcher.checkingStatus"));
+        ProgressDialog.showProgress(this, future, SharedLocale.tr("launcher.checkingTitle"),
+                SharedLocale.tr("launcher.checkingStatus"));
         SwingHelper.addErrorDialogCallback(this, future);
     }
 
     private void showOptions() {
         ConfigurationDialog configDialog = new ConfigurationDialog(this, launcher);
         configDialog.setVisible(true);
+        if (configDialog.isGameKeyChanged()) {
+            loadInstances();
+        }
     }
 
     private void launch() {
