@@ -4,6 +4,10 @@ plugins {
     id 'io.freefair.lombok'
 }
 
+ext.installerVersion = project.version.toString().replaceAll('-SNAPSHOT', '')
+
+apply from: 'installer/assemble-runtime.gradle'
+
 application {
     mainClass = "com.skcraft.launcher.Bootstrap"
 }
@@ -17,6 +21,91 @@ processResources {
     filesMatching('**/*.properties') {
         filter {
             it.replace('${project.version}', project.version)
+        }
+    }
+}
+
+tasks.register('packageWindows', JavaExec) {
+    group = 'distribution'
+    description = 'Build Windows Setup.exe (NSIS) via Java packager.'
+    dependsOn tasks.named('createWindowsLauncher')
+
+    doFirst {
+        if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
+            throw new GradleException('packageWindows must be run on Windows.')
+        }
+    }
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
+    args 'windows', projectDir.absolutePath, project.installerVersion
+}
+
+tasks.register('packageLinux', JavaExec) {
+    group = 'distribution'
+    description = 'Build Linux AppImage, tar.gz, and optional DEB package via Java packager.'
+    dependsOn tasks.named('assembleAppImage')
+
+    doFirst {
+        if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('linux')) {
+            throw new GradleException('packageLinux must be run on Linux.')
+        }
+    }
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
+    args 'linux', projectDir.absolutePath, project.installerVersion, (project.findProperty('buildDeb') ?: 'false').toString()
+}
+
+tasks.register('packageLinuxWsl', JavaExec) {
+    group = 'distribution'
+    description = 'Build Linux AppImage, tar.gz, and optional DEB from Windows via WSL using Java packager.'
+
+    doFirst {
+        if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
+            throw new GradleException('packageLinuxWsl must be run on Windows.')
+        }
+    }
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
+    args 'wsl-linux',
+            rootProject.projectDir.absolutePath,
+            project.installerVersion,
+            (project.findProperty('buildDeb') ?: 'false').toString(),
+            (project.findProperty('wslDistro') ?: '').toString()
+}
+
+tasks.register('packageMac', JavaExec) {
+    group = 'distribution'
+    description = 'Build macOS DMG and tarball via Java packager.'
+    dependsOn tasks.named('assembleAppImage')
+
+    doFirst {
+        if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('mac')) {
+            throw new GradleException('packageMac must be run on macOS.')
+        }
+    }
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
+    args 'mac', projectDir.absolutePath, project.installerVersion
+}
+
+tasks.register('package') {
+    group = 'distribution'
+    description = 'Build native installer for the current platform.'
+
+    def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    if (hostOs.contains('win')) {
+        dependsOn tasks.named('packageWindows')
+    } else if (hostOs.contains('mac')) {
+        dependsOn tasks.named('packageMac')
+    } else if (hostOs.contains('linux')) {
+        dependsOn tasks.named('packageLinux')
+    } else {
+        doFirst {
+            throw new GradleException('Unsupported OS for packaging.')
         }
     }
 }

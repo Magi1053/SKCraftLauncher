@@ -16,6 +16,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -25,13 +26,32 @@ import static com.skcraft.launcher.bootstrap.SharedLocale.tr;
 @Log
 public class Downloader implements Runnable, ProgressObservable {
 
+    public enum Mode {
+        INITIAL,
+        UPDATE
+    }
+
     private final Bootstrap bootstrap;
+    private final Mode mode;
+    private final URL updateUrl;
+    private final List<LauncherBinary> existingBinaries;
     private DownloadFrame dialog;
     private HttpRequest httpRequest;
     private Thread thread;
 
     public Downloader(Bootstrap bootstrap) {
+        this(bootstrap, Mode.INITIAL, null, Collections.<LauncherBinary>emptyList());
+    }
+
+    public Downloader(Bootstrap bootstrap, URL updateUrl, List<LauncherBinary> existingBinaries) {
+        this(bootstrap, Mode.UPDATE, updateUrl, existingBinaries);
+    }
+
+    private Downloader(Bootstrap bootstrap, Mode mode, URL updateUrl, List<LauncherBinary> existingBinaries) {
         this.bootstrap = bootstrap;
+        this.mode = mode;
+        this.updateUrl = updateUrl;
+        this.existingBinaries = new ArrayList<LauncherBinary>(existingBinaries);
     }
 
     @Override
@@ -42,11 +62,13 @@ public class Downloader implements Runnable, ProgressObservable {
             execute();
         } catch (InterruptedException e) {
             log.log(Level.WARNING, "Interrupted");
-            System.exit(0);
+            launchFallbackOrExit();
         } catch (Throwable t) {
             log.log(Level.WARNING, "Failed to download launcher", t);
-            SwingHelper.showErrorDialog(null, tr("errors.failedDownloadError"), tr("errorTitle"), t);
-            System.exit(0);
+            if (mode == Mode.INITIAL) {
+                SwingHelper.showErrorDialog(null, tr("errors.failedDownloadError"), tr("errorTitle"), t);
+            }
+            launchFallbackOrExit();
         }
     }
 
@@ -61,43 +83,18 @@ public class Downloader implements Runnable, ProgressObservable {
             }
         });
 
-        URL updateUrl = HttpRequest.url(bootstrap.getProperties().getProperty("latestUrl"));
-
-        log.info("Reading update URL " + updateUrl + "...");
-        List<LauncherBinary> binaries = new ArrayList<LauncherBinary>();
+        List<LauncherBinary> binaries = new ArrayList<LauncherBinary>(existingBinaries);
+        URL resolvedUrl = resolveDownloadUrl();
 
         try {
-            String data = HttpRequest
-                    .get(updateUrl)
-                    .execute()
-                    .expectResponseCode(200)
-                    .returnContent()
-                    .asString("UTF-8");
-
-            Object object = JSONValue.parse(data);
-            URL url;
-
-            if (object instanceof JSONObject) {
-                String rawUrl = String.valueOf(((JSONObject) object).get("url"));
-                if (rawUrl != null) {
-                    url = HttpRequest.url(rawUrl.trim());
-                } else {
-                    log.warning("Did not get valid update document - got:\n\n" + data);
-                    throw new IOException("Update URL did not return a valid result");
-                }
-            } else {
-                log.warning("Did not get valid update document - got:\n\n" + data);
-                throw new IOException("Update URL did not return a valid result");
-            }
-
             checkInterrupted();
 
             File finalFile = new File(bootstrap.getBinariesDir(), System.currentTimeMillis() + ".jar");
             File tempFile = new File(finalFile.getParentFile(), finalFile.getName() + ".tmp");
 
-            log.info("Downloading " + url + " to " + tempFile.getAbsolutePath());
+            log.info("Downloading " + resolvedUrl + " to " + tempFile.getAbsolutePath());
 
-            httpRequest = HttpRequest.get(url);
+            httpRequest = HttpRequest.get(resolvedUrl);
             httpRequest
                     .execute()
                     .expectResponseCode(200)
@@ -119,6 +116,52 @@ public class Downloader implements Runnable, ProgressObservable {
         }
 
         bootstrap.launchExisting(binaries, false);
+    }
+
+    private URL resolveDownloadUrl() throws Exception {
+        if (mode == Mode.UPDATE) {
+            if (updateUrl == null) {
+                throw new IOException("Update URL was not provided");
+            }
+            return updateUrl;
+        }
+
+        URL latestUrl = HttpRequest.url(bootstrap.getProperties().getProperty("latestUrl"));
+        log.info("Reading update URL " + latestUrl + "...");
+
+        String data = HttpRequest
+                .get(latestUrl)
+                .execute()
+                .expectResponseCode(200)
+                .returnContent()
+                .asString("UTF-8");
+
+        Object object = JSONValue.parse(data);
+        if (!(object instanceof JSONObject)) {
+            log.warning("Did not get valid update document - got:\n\n" + data);
+            throw new IOException("Update URL did not return a valid result");
+        }
+
+        Object rawUrlValue = ((JSONObject) object).get("url");
+        if (rawUrlValue == null) {
+            log.warning("Did not get valid update document - got:\n\n" + data);
+            throw new IOException("Update URL did not return a valid result");
+        }
+
+        return HttpRequest.url(String.valueOf(rawUrlValue).trim());
+    }
+
+    private void launchFallbackOrExit() {
+        if (mode == Mode.UPDATE && !existingBinaries.isEmpty()) {
+            try {
+                bootstrap.launchExisting(new ArrayList<LauncherBinary>(existingBinaries), false);
+                return;
+            } catch (Throwable t) {
+                log.log(Level.WARNING, "Failed to launch existing launcher after update interruption", t);
+            }
+        }
+
+        System.exit(0);
     }
 
     public void cancel() {

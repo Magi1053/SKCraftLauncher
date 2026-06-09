@@ -11,13 +11,11 @@ import lombok.Getter;
 import lombok.extern.java.Log;
 
 import javax.swing.*;
-import javax.swing.filechooser.FileSystemView;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.*;
@@ -31,18 +29,16 @@ public class Bootstrap {
     private static final int BOOTSTRAP_VERSION = 1;
 
     @Getter private final File baseDir;
-    @Getter private final boolean portable;
     @Getter private final File binariesDir;
     @Getter private final Properties properties;
     private final String[] originalArgs;
 
     public static void main(String[] args) throws Throwable {
         SimpleLogFormatter.configureGlobalLogger();
+        BootstrapFileLogging.init();
         SharedLocale.loadBundle("com.skcraft.launcher.lang.Bootstrap", Locale.getDefault());
 
-        boolean portable = isPortableMode();
-
-        Bootstrap bootstrap = new Bootstrap(portable, args);
+        Bootstrap bootstrap = new Bootstrap(args);
         try {
             bootstrap.cleanup();
             bootstrap.launch();
@@ -53,13 +49,16 @@ public class Bootstrap {
         }
     }
 
-    public Bootstrap(boolean portable, String[] args) throws IOException {
-        this.properties = BootstrapUtils.loadProperties(Bootstrap.class, "bootstrap.properties");
+    public Bootstrap(String[] args) throws IOException {
+        this.properties = BootstrapUtils.loadProperties(
+                Bootstrap.class,
+                "bootstrap.properties",
+                "com.skcraft.launcher.bootstrap.propertiesFile");
 
-        File baseDir = portable ? new File(".") : getUserLauncherDir();
+        File baseDir = resolveDataDir();
 
         this.baseDir = baseDir;
-        this.portable = portable;
+        BootstrapFileLogging.attachFile(this.baseDir);
         this.binariesDir = new File(baseDir, "launcher");
         this.originalArgs = args;
 
@@ -92,17 +91,56 @@ public class Bootstrap {
             }
         }
 
-        if (!binaries.isEmpty()) {
-            launchExisting(binaries, true);
-        } else {
+        if (binaries.isEmpty()) {
             launchInitial();
+            return;
         }
+
+        Collections.sort(binaries);
+
+        LauncherBinary currentBinary = findNewestExecutableBinary(binaries);
+        if (currentBinary == null) {
+            launchExisting(binaries, true);
+            return;
+        }
+
+        try {
+            String currentVersion = JarVersionReader.readVersion(currentBinary.getPath());
+            UpdateChecker.UpdateInfo updateInfo = new UpdateChecker(this).checkForUpdate(currentVersion);
+            if (updateInfo != null) {
+                log.info("Found launcher update " + updateInfo.getVersion() + "; downloading before launch.");
+                launchUpdate(binaries, updateInfo.getUrl());
+                return;
+            }
+        } catch (Throwable t) {
+            log.log(Level.WARNING, "Unable to perform bootstrap update check; launching local JAR.", t);
+        }
+
+        launchExisting(binaries, true);
     }
 
     public void launchInitial() throws Exception {
         Bootstrap.log.info("Downloading the launcher...");
         Thread thread = new Thread(new Downloader(this));
         thread.start();
+    }
+
+    private void launchUpdate(List<LauncherBinary> binaries, URL updateUrl) {
+        Thread thread = new Thread(new Downloader(this, updateUrl, binaries));
+        thread.start();
+    }
+
+    private LauncherBinary findNewestExecutableBinary(List<LauncherBinary> binaries) {
+        for (LauncherBinary binary : binaries) {
+            try {
+                binary.getExecutableJar();
+                return binary;
+            } catch (LauncherBinary.PackedJarException e) {
+                log.log(Level.WARNING, "Skipping packed launcher binary " + binary.getPath(), e);
+            }
+        }
+
+        return null;
     }
 
     public void launchExisting(List<LauncherBinary> binaries, boolean redownload) throws Exception {
@@ -144,22 +182,11 @@ public class Bootstrap {
 
     public void execute(Class<?> clazz) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         Method method = clazz.getDeclaredMethod("main", String[].class);
-        String[] launcherArgs;
-
-        if (portable) {
-            launcherArgs = new String[] {
-                    "--portable",
-                    "--dir",
-                    baseDir.getAbsolutePath(),
-                    "--bootstrap-version",
-                    String.valueOf(BOOTSTRAP_VERSION) };
-        } else {
-            launcherArgs = new String[] {
-                    "--dir",
-                    baseDir.getAbsolutePath(),
-                    "--bootstrap-version",
-                    String.valueOf(BOOTSTRAP_VERSION)  };
-        }
+        String[] launcherArgs = new String[] {
+                "--dir",
+                baseDir.getAbsolutePath(),
+                "--bootstrap-version",
+                String.valueOf(BOOTSTRAP_VERSION) };
 
         String[] args = new String[originalArgs.length + launcherArgs.length];
         System.arraycopy(launcherArgs, 0, args, 0, launcherArgs.length);
@@ -170,10 +197,19 @@ public class Bootstrap {
         method.invoke(null, new Object[] { args });
     }
 
-    public Class<?> load(File jarFile) throws MalformedURLException, ClassNotFoundException {
+    public Class<?> load(File jarFile) throws Exception {
         URL[] urls = new URL[] { jarFile.toURI().toURL() };
         URLClassLoader child = new URLClassLoader(urls, this.getClass().getClassLoader());
         Class<?> clazz = Class.forName(getProperties().getProperty("launcherClass"), true, child);
+
+        String latestUrl = getProperties().getProperty("latestUrl");
+        Properties prop = new Properties();
+        prop.load(clazz.getResourceAsStream("launcher.properties"));
+        String selfUpdateUrl = prop.getProperty("selfUpdateUrl");
+        if (!Objects.equals(latestUrl, selfUpdateUrl)) {
+            throw new Exception("Self Update URL is not equal to Latest URL");
+        }
+
         return clazz;
     }
 
@@ -184,24 +220,62 @@ public class Bootstrap {
         }
     }
 
-    private static File getFileChooseDefaultDir() {
-        JFileChooser chooser = new JFileChooser();
-        FileSystemView fsv = chooser.getFileSystemView();
-        return fsv.getDefaultDirectory();
+    private File resolveDataDir() throws IOException {
+        if (!isWindows()) {
+            return getUserLauncherDir();
+        }
+
+        File installDir = BootstrapUtils.getWindowsInstallDir(Bootstrap.class);
+        if (installDir == null) {
+            throw new IOException("Unable to determine launcher install directory.");
+        }
+        if (!ensureWritableDirectory(installDir)) {
+            throw new IOException("Install directory is not writable: " + installDir);
+        }
+
+        LegacyDocumentsMigrator.migrateIfNeeded(installDir, BootstrapUtils.getLegacyWindowsDataDir(properties));
+
+        File cwd = new File(System.getProperty("user.dir")).getAbsoluteFile();
+        if (isWritableDirectory(cwd) && pathsEqual(cwd, installDir)) {
+            return installDir;
+        }
+
+        log.info("Using install directory for launcher data: " + installDir.getAbsolutePath());
+        return installDir;
+    }
+
+    private static boolean ensureWritableDirectory(File dir) {
+        if (!dir.exists() && !dir.mkdirs()) {
+            return false;
+        }
+        return isWritableDirectory(dir);
+    }
+
+    private static boolean isWritableDirectory(File dir) {
+        return dir.isDirectory() && dir.canWrite();
+    }
+
+    private static boolean pathsEqual(File first, File second) {
+        try {
+            return first.getCanonicalPath().equalsIgnoreCase(second.getCanonicalPath());
+        } catch (IOException e) {
+            return first.getAbsolutePath().equalsIgnoreCase(second.getAbsolutePath());
+        }
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win");
     }
 
     private File getUserLauncherDir() {
-        String osName = System.getProperty("os.name").toLowerCase();
-        if (osName.contains("win")) {
-            return new File(getFileChooseDefaultDir(), getProperties().getProperty("homeFolderWindows"));
-        }
+        String osName = System.getProperty("os.name").toLowerCase(Locale.ROOT);
 
         File dotFolder = new File(System.getProperty("user.home"), getProperties().getProperty("homeFolder"));
         String xdgFolderName = getProperties().getProperty("homeFolderLinux");
 
         if (osName.contains("linux") && !dotFolder.exists() && xdgFolderName != null && !xdgFolderName.isEmpty()) {
             String xdgDataHome = System.getenv("XDG_DATA_HOME");
-            if (xdgDataHome.isEmpty()) {
+            if (xdgDataHome == null || xdgDataHome.isEmpty()) {
                 xdgDataHome = System.getProperty("user.home") + "/.local/share";
             }
 
@@ -210,10 +284,4 @@ public class Bootstrap {
 
         return dotFolder;
     }
-
-    private static boolean isPortableMode() {
-        return new File("portable.txt").exists();
-    }
-
-
 }

@@ -44,3 +44,9 @@ subprojects {
         tasks.named('jar') { enabled = true }
     }
 }
+
+tasks.register('package') {
+    group = 'distribution'
+    description = 'Build native launcher installer for the current platform.'
+    dependsOn ':launcher-bootstrap:package'
+}

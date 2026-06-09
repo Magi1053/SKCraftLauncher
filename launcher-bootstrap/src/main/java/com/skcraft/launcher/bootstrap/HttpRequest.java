@@ -44,6 +44,8 @@ public class HttpRequest implements Closeable, ProgressObservable {
     private HttpURLConnection conn;
     private InputStream inputStream;
     private int redirectCount;
+    private int connectTimeout = READ_TIMEOUT;
+    private int readTimeout = READ_TIMEOUT;
 
     private long contentLength = -1;
     private long readBytes = 0;
@@ -80,6 +82,29 @@ public class HttpRequest implements Closeable, ProgressObservable {
      */
     public HttpRequest header(String key, String value) {
         headers.put(key, value);
+        return this;
+    }
+
+    /**
+     * Set both connect and read timeout.
+     *
+     * @param timeout timeout in milliseconds
+     * @return this object
+     */
+    public HttpRequest timeout(int timeout) {
+        return timeout(timeout, timeout);
+    }
+
+    /**
+     * Set connect and read timeout independently.
+     *
+     * @param connectTimeout connect timeout in milliseconds
+     * @param readTimeout read timeout in milliseconds
+     * @return this object
+     */
+    public HttpRequest timeout(int connectTimeout, int readTimeout) {
+        this.connectTimeout = connectTimeout;
+        this.readTimeout = readTimeout;
         return this;
     }
 
@@ -136,7 +161,8 @@ public class HttpRequest implements Closeable, ProgressObservable {
         conn.setRequestMethod(method);
         conn.setUseCaches(false);
         conn.setDoOutput(true);
-        conn.setReadTimeout(READ_TIMEOUT);
+        conn.setConnectTimeout(connectTimeout);
+        conn.setReadTimeout(readTimeout);
 
         conn.connect();
 

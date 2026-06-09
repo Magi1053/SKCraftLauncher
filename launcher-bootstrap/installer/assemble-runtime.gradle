@@ -1,0 +1,166 @@
+def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+
+def runtimeModules = [
+        'java.desktop',
+        'java.logging',
+        'java.management',
+        'java.naming',
+        'java.sql',
+        'java.xml',
+        'jdk.crypto.ec',
+        'jdk.httpserver',
+        'jdk.charsets',
+        'jdk.management',
+        'jdk.unsupported',
+        'jdk.zipfs',
+]
+
+def runtimeDir = layout.buildDirectory.dir('runtime')
+def appImageDir = layout.buildDirectory.dir('app-image')
+def windowsAppImageDir = layout.buildDirectory.dir('windows-app-image')
+
+def writeIcoFromPng = { File sourcePng, File targetIco ->
+    if (!sourcePng.isFile()) {
+        throw new GradleException("Launcher icon PNG not found at ${sourcePng}.")
+    }
+
+    def image = javax.imageio.ImageIO.read(sourcePng)
+    if (image == null) {
+        throw new GradleException("Failed to read PNG icon at ${sourcePng}.")
+    }
+
+    byte[] pngBytes = sourcePng.bytes
+    int width = Math.min(image.width, 256)
+    int height = Math.min(image.height, 256)
+
+    targetIco.parentFile.mkdirs()
+    targetIco.withOutputStream { out ->
+        out.write(0); out.write(0)
+        out.write(1); out.write(0)
+        out.write(1); out.write(0)
+        out.write(width >= 256 ? 0 : width)
+        out.write(height >= 256 ? 0 : height)
+        out.write(0); out.write(0)
+        out.write(1); out.write(0)
+        out.write(32); out.write(0)
+
+        int size = pngBytes.length
+        out.write(size & 0xFF)
+        out.write((size >> 8) & 0xFF)
+        out.write((size >> 16) & 0xFF)
+        out.write((size >> 24) & 0xFF)
+
+        int offset = 22
+        out.write(offset & 0xFF)
+        out.write((offset >> 8) & 0xFF)
+        out.write((offset >> 16) & 0xFF)
+        out.write((offset >> 24) & 0xFF)
+        out.write(pngBytes)
+    }
+}
+
+def jdk17Launcher = project.extensions.getByType(org.gradle.jvm.toolchain.JavaToolchainService).launcherFor {
+    languageVersion = org.gradle.jvm.toolchain.JavaLanguageVersion.of(17)
+}
+
+tasks.register('createRuntimeImage', Exec) {
+    def runtimeOutput = runtimeDir.get().asFile
+
+    doFirst {
+        def javaHome = jdk17Launcher.get().metadata.installationPath.asFile
+        def jmodsDir = new File(javaHome, 'jmods')
+        def jlinkExecutable = new File(javaHome, hostOs.contains('win') ? 'bin/jlink.exe' : 'bin/jlink')
+
+        if (!jmodsDir.isDirectory()) {
+            throw new GradleException("JDK 17 jmods directory not found at ${jmodsDir}. Install a JDK 17 (not a JRE) to package installers.")
+        }
+        if (!jlinkExecutable.isFile()) {
+            throw new GradleException("jlink executable not found at ${jlinkExecutable}. Install a JDK 17 that includes jlink.")
+        }
+        project.delete(runtimeOutput)
+
+        commandLine jlinkExecutable.absolutePath,
+                '--module-path', jmodsDir.absolutePath,
+                '--add-modules', runtimeModules.join(','),
+                '--strip-debug',
+                '--no-man-pages',
+                '--no-header-files',
+                '--compress=2',
+                '--output', runtimeOutput.absolutePath
+    }
+}
+
+tasks.register('assembleAppImage') {
+    dependsOn tasks.named('shadowJar'), tasks.named('createRuntimeImage')
+
+    doLast {
+        def outputDir = appImageDir.get().asFile
+        def appDir = new File(outputDir, 'app')
+        def runtimeOutputDir = runtimeDir.get().asFile
+        def jarFile = tasks.named('shadowJar').get().archiveFile.get().asFile
+
+        project.delete(outputDir)
+        appDir.mkdirs()
+
+        project.copy {
+            from(runtimeOutputDir)
+            into(new File(outputDir, 'runtime'))
+        }
+
+        project.copy {
+            from(jarFile)
+            into(appDir)
+            rename { 'launcher-bootstrap.jar' }
+        }
+
+        def commandScript = new File(outputDir, 'launcher-bootstrap.cmd')
+        commandScript.text = """@echo off
+set SCRIPT_DIR=%~dp0
+"%SCRIPT_DIR%runtime\\bin\\java.exe" -jar "%SCRIPT_DIR%app\\launcher-bootstrap.jar" %*
+"""
+
+        def shellScript = new File(outputDir, 'launcher-bootstrap')
+        shellScript.text = '''#!/usr/bin/env sh
+set -eu
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/runtime/bin/java" -jar "$SCRIPT_DIR/app/launcher-bootstrap.jar" "$@"
+'''
+        shellScript.setExecutable(true)
+    }
+}
+
+tasks.register('createWindowsLauncher', Exec) {
+    dependsOn tasks.named('assembleAppImage')
+
+    def stagedAppImageDir = appImageDir.get().asFile
+    def windowsImageOutputDir = windowsAppImageDir.get().asFile
+    def iconSourcePng = file("${projectDir}/src/main/resources/com/skcraft/launcher/bootstrapper_icon.png")
+    def iconFile = layout.buildDirectory.file('tmp/windows/icon.ico').get().asFile
+
+    onlyIf {
+        hostOs.contains('win')
+    }
+
+    doFirst {
+        def javaHome = jdk17Launcher.get().metadata.installationPath.asFile
+        def jpackageExecutable = new File(javaHome, 'bin/jpackage.exe')
+        if (!jpackageExecutable.isFile()) {
+            throw new GradleException("jpackage executable not found at ${jpackageExecutable}. Install a JDK 17 that includes jpackage.")
+        }
+        writeIcoFromPng(iconSourcePng, iconFile)
+
+        project.delete(windowsImageOutputDir)
+
+        commandLine jpackageExecutable.absolutePath,
+                '--type', 'app-image',
+                '--dest', windowsImageOutputDir.absolutePath,
+                '--name', 'SKCraft Launcher',
+                '--app-version', project.installerVersion,
+                '--vendor', 'SKCraft',
+                '--input', new File(stagedAppImageDir, 'app').absolutePath,
+                '--main-jar', 'launcher-bootstrap.jar',
+                '--main-class', 'com.skcraft.launcher.Bootstrap',
+                '--runtime-image', new File(stagedAppImageDir, 'runtime').absolutePath,
+                '--icon', iconFile.absolutePath
+    }
+}
