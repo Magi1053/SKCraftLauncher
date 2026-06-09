@@ -478,4 +478,36 @@ public final class SwingHelper {
         System.setProperty("com.apple.mrj.application.apple.menu.about.name", appName);
         System.setProperty("apple.laf.useScreenMenuBar", "true");
     }
+
+    public static Color uiColor(String key, Color fallback) {
+        Color color = UIManager.getColor(key);
+        return color != null ? color : fallback;
+    }
+
+    public static void styleDialogButton(JButton button) {
+        button.setFocusPainted(false);
+        updateDialogButtonCursor(button);
+    }
+
+    public static void updateDialogButtonCursor(JButton button) {
+        button.setCursor(button.isEnabled()
+                ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                : Cursor.getDefaultCursor());
+    }
+
+    public static void alignButtonSizes(JButton... buttons) {
+        int maxWidth = 0;
+        int maxHeight = 0;
+        for (JButton button : buttons) {
+            Dimension preferred = button.getPreferredSize();
+            maxWidth = Math.max(maxWidth, preferred.width);
+            maxHeight = Math.max(maxHeight, preferred.height);
+        }
+        Dimension size = new Dimension(maxWidth, maxHeight);
+        for (JButton button : buttons) {
+            button.setPreferredSize(size);
+            button.setMinimumSize(size);
+            button.setMaximumSize(size);
+        }
+    }
 }

@@ -27,6 +27,9 @@ import static com.skcraft.launcher.util.HttpRequest.url;
 @RequiredArgsConstructor
 public class MicrosoftLoginService implements LoginService {
 	private static final URL MS_TOKEN_URL = url("https://login.live.com/oauth20_token.srf");
+	private static final URL MS_DEVICE_CODE_URL = url("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode");
+	private static final URL MS_DEVICE_TOKEN_URL = url("https://login.microsoftonline.com/consumers/oauth2/v2.0/token");
+	private static final String MS_SCOPE = "XboxLive.signin XboxLive.offline_access";
 
 	private final String clientId;
 
@@ -61,6 +64,34 @@ public class MicrosoftLoginService implements LoginService {
 		return session;
 	}
 
+	public DeviceCodeDetails requestDeviceCodeDetails()
+			throws IOException, InterruptedException, AuthenticationException {
+		DeviceCodeResponse deviceCode = requestDeviceCode();
+		if (deviceCode.getDeviceCode() == null || deviceCode.getDeviceCode().isEmpty()) {
+			throw new AuthenticationException("Failed to obtain Microsoft device code.");
+		}
+
+		long expiresAt = System.currentTimeMillis() + (deviceCode.getExpiresIn() * 1000L);
+		return new DeviceCodeDetails(
+				deviceCode.getDeviceCode(),
+				deviceCode.getUserCode(),
+				deviceCode.getVerificationUri(),
+				deviceCode.getVerificationUriComplete(),
+				deviceCode.getMessage(),
+				expiresAt,
+				deviceCode.getInterval());
+	}
+
+	public Session loginWithDeviceCode(DeviceCodeDetails details, Receiver oauthDone)
+			throws IOException, InterruptedException, AuthenticationException {
+		TokenResponse response = pollDeviceCodeToken(details);
+		oauthDone.tell();
+
+		Profile session = performLogin(response.getAccessToken(), null);
+		session.setRefreshToken(response.getRefreshToken());
+		return session;
+	}
+
 	@Override
 	public Session restore(SavedSession savedSession)
 			throws IOException, InterruptedException, AuthenticationException {
@@ -91,6 +122,82 @@ public class MicrosoftLoginService implements LoginService {
 				})
 				.returnContent()
 				.asJson(TokenResponse.class);
+	}
+
+	private DeviceCodeResponse requestDeviceCode() throws IOException, InterruptedException, AuthenticationException {
+		HttpRequest.Form form = HttpRequest.Form.form();
+		form.add("client_id", clientId);
+		form.add("scope", MS_SCOPE);
+
+		return HttpRequest.post(MS_DEVICE_CODE_URL)
+				.bodyForm(form)
+				.execute()
+				.expectResponseCodeOr(200, (req) -> {
+					TokenError error = req.returnContent().asJson(TokenError.class);
+					return new AuthenticationException(error.errorDescription, true);
+				})
+				.returnContent()
+				.asJson(DeviceCodeResponse.class);
+	}
+
+	private TokenResponse pollDeviceCodeToken(DeviceCodeDetails details)
+			throws IOException, InterruptedException, AuthenticationException {
+		int intervalSeconds = Math.max(1, details.getInterval());
+		long expiryTime = details.getExpiresAt();
+
+		while (System.currentTimeMillis() < expiryTime) {
+			DeviceCodeTokenResult result = exchangeDeviceCodeToken(details.getDeviceCode());
+			if (result.success != null) {
+				return result.success;
+			}
+
+			String errorCode = result.error != null ? result.error.error : null;
+			if ("authorization_pending".equals(errorCode)) {
+				Thread.sleep(intervalSeconds * 1000L);
+				continue;
+			}
+			if ("slow_down".equals(errorCode)) {
+				intervalSeconds++;
+				Thread.sleep(intervalSeconds * 1000L);
+				continue;
+			}
+			if ("expired_token".equals(errorCode) || "invalid_grant".equals(errorCode)) {
+				throw new AuthenticationException("Device code expired. Please retry sign in.");
+			}
+			if ("authorization_declined".equals(errorCode) || "access_denied".equals(errorCode)) {
+				throw new AuthenticationException("Microsoft sign in was cancelled.");
+			}
+
+			String message = result.error != null && result.error.errorDescription != null
+					? result.error.errorDescription : "Microsoft device sign in failed.";
+			throw new AuthenticationException(message, true);
+		}
+
+		throw new AuthenticationException("Timed out waiting for Microsoft sign in.");
+	}
+
+	private DeviceCodeTokenResult exchangeDeviceCodeToken(String deviceCode)
+			throws IOException, InterruptedException {
+		HttpRequest.Form form = HttpRequest.Form.form();
+		form.add("client_id", clientId);
+		form.add("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
+		form.add("device_code", deviceCode);
+		form.add("scope", MS_SCOPE);
+
+		HttpRequest request = HttpRequest.post(MS_DEVICE_TOKEN_URL)
+				.bodyForm(form)
+				.execute();
+
+		try {
+			if (request.getResponseCode() == 200) {
+				return new DeviceCodeTokenResult(request.returnContent().asJson(TokenResponse.class), null);
+			}
+
+			TokenError error = request.returnContent().asJson(TokenError.class);
+			return new DeviceCodeTokenResult(null, error);
+		} finally {
+			request.close();
+		}
 	}
 
 	private Profile performLogin(String microsoftToken, SavedSession previous)
@@ -170,8 +277,48 @@ public class MicrosoftLoginService implements LoginService {
 		private String errorDescription;
 	}
 
+	@Data
+	@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	private static class DeviceCodeResponse {
+		private String deviceCode;
+		private String userCode;
+		private String verificationUri;
+		private String verificationUriComplete;
+		private Integer expiresIn;
+		private Integer interval;
+		private String message;
+
+		public int getExpiresIn() {
+			return expiresIn != null ? expiresIn : 900;
+		}
+
+		public int getInterval() {
+			return interval != null ? interval : 5;
+		}
+	}
+
+	@RequiredArgsConstructor
+	private static class DeviceCodeTokenResult {
+		private final TokenResponse success;
+		private final TokenError error;
+	}
+
+	@Data
+	@RequiredArgsConstructor
+	public static class DeviceCodeDetails {
+		private final String deviceCode;
+		private final String userCode;
+		private final String verificationUri;
+		private final String verificationUriComplete;
+		private final String message;
+		private final long expiresAt;
+		private final int interval;
+	}
+
 	@FunctionalInterface
 	public interface Receiver {
 		void tell();
 	}
+
 }

@@ -6,7 +6,6 @@ import com.skcraft.launcher.util.HttpRequest;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-import java.awt.*;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -20,13 +19,7 @@ public class MicrosoftWebAuthorizer {
 	@Getter private String redirectUri;
 
 	public OauthResult authorize() throws IOException, AuthenticationException, InterruptedException {
-		if (Desktop.isDesktopSupported()) {
-			// Interactive auth
-			return authorizeInteractive();
-		} else {
-			// TODO Device code auth
-			return null;
-		}
+		return authorizeInteractive();
 	}
 
 	private OauthResult authorizeInteractive() throws IOException, AuthenticationException, InterruptedException {
