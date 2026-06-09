@@ -12,7 +12,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 @JsonTypeInfo(use=JsonTypeInfo.Id.NAME, include=JsonTypeInfo.As.PROPERTY, property="if")
 @JsonSubTypes({
         @JsonSubTypes.Type(value = RequireAny.class, name = "requireAny"),
-        @JsonSubTypes.Type(value = RequireAll.class, name = "requireAll")
+        @JsonSubTypes.Type(value = RequireAll.class, name = "requireAll"),
+        @JsonSubTypes.Type(value = RequireNone.class, name = "requireNone"),
+        @JsonSubTypes.Type(value = RequireAnyAndNone.class, name = "requireAnyAndNone")
 })
 public interface Condition {
 

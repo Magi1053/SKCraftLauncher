@@ -18,7 +18,11 @@ public class FeaturePattern {
     @JsonProperty("files")
     private FnPatternList filePatterns = new FnPatternList();
 
-    public boolean matches(String path) {
-        return filePatterns != null && filePatterns.matches(path);
+    public boolean matchesInclude(String path) {
+        return filePatterns != null && filePatterns.matchesInclude(path);
+    }
+
+    public boolean excludes(String path) {
+        return filePatterns != null && filePatterns.matchesExclude(path);
     }
 }

@@ -39,6 +39,14 @@ public class FnPatternList {
         return include != null && matches(path, include) && (exclude == null || !matches(path, exclude));
     }
 
+    public boolean matchesInclude(String path) {
+        return include != null && matches(path, include);
+    }
+
+    public boolean matchesExclude(String path) {
+        return exclude != null && matches(path, exclude);
+    }
+
     public boolean matches(String path, Collection<String> patterns) {
         for (String pattern : patterns) {
             if (FnMatch.fnmatch(pattern, path, flags)) {

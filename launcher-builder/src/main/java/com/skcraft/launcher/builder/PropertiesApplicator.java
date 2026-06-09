@@ -49,15 +49,30 @@ public class PropertiesApplicator {
 
     public Condition fromFeature(String path) {
         List<Feature> found = new ArrayList<Feature>();
+        List<Feature> excluded = new ArrayList<Feature>();
         for (FeaturePattern pattern : features) {
-            if (pattern.matches(path)) {
+            boolean includesPath = pattern.matchesInclude(path);
+            boolean excludesPath = pattern.excludes(path);
+
+            if (includesPath || excludesPath) {
                 used.add(pattern.getFeature());
+            }
+
+            if (includesPath && !excludesPath) {
                 found.add(pattern.getFeature());
+            }
+
+            if (excludesPath) {
+                excluded.add(pattern.getFeature());
             }
         }
 
-        if (!found.isEmpty()) {
+        if (!found.isEmpty() && !excluded.isEmpty()) {
+            return new RequireAnyAndNone(found, excluded);
+        } else if (!found.isEmpty()) {
             return new RequireAny(found);
+        } else if (!excluded.isEmpty()) {
+            return new RequireNone(excluded);
         } else {
             return null;
         }
@@ -68,7 +83,14 @@ public class PropertiesApplicator {
     }
 
     public List<Feature> getFeaturesInUse() {
-        return new ArrayList<Feature>(used);
+        List<Feature> ordered = new ArrayList<Feature>();
+        for (FeaturePattern pattern : features) {
+            Feature feature = pattern.getFeature();
+            if (used.contains(feature)) {
+                ordered.add(feature);
+            }
+        }
+        return ordered;
     }
 
 }
