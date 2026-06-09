@@ -1,17 +1,17 @@
 plugins {
     id 'application'
-    id "com.github.johnrengelman.shadow"
+    id 'com.gradleup.shadow'
     id 'io.freefair.lombok'
 }
 
 application {
-    mainClassName = "com.skcraft.launcher.FancyLauncher"
+    mainClass = "com.skcraft.launcher.FancyLauncher"
 }
 
 repositories {
     maven {
-        name = 'bbkr.space maven'
-        url = 'https://server.bbkr.space/artifactory/libs-snapshot'
+        name = 'bbkr.space mirror'
+        url = 'https://alexiil.uk/mirrors/server.bbkr.space/maven-snapshot'
     }
 }
 
@@ -22,15 +22,4 @@ dependencies {
 
 shadowJar {
     dependsOn ':launcher:shadowJar'
-    archiveClassifier.set("")
-}
-
-// Work around gradle shadow bug
-// see https://github.com/johnrengelman/shadow/issues/713
-startScripts.dependsOn(':launcher:shadowJar')
-distTar.dependsOn(':launcher:shadowJar')
-distZip.dependsOn(':launcher:shadowJar')
-
-build {
-    dependsOn(shadowJar)
 }
