@@ -6,21 +6,28 @@
 
 package com.skcraft.launcher.swing;
 
+import com.skcraft.launcher.Instance;
+
 import javax.swing.table.TableModel;
+import java.awt.Font;
 
 public class InstanceTable extends DefaultTable {
+
+    private static final int INSTANCE_ROW_HEIGHT = 44;
+    private static final float INSTANCE_FONT_SIZE = 14.0f;
 
     public InstanceTable() {
         super();
         setTableHeader(null);
+        setFont(getFont().deriveFont(Font.PLAIN, INSTANCE_FONT_SIZE));
+        setRowHeight(INSTANCE_ROW_HEIGHT);
     }
 
     @Override
     public void setModel(TableModel dataModel) {
         super.setModel(dataModel);
-        try {
-            getColumnModel().getColumn(0).setMaxWidth(24);
-        } catch (ArrayIndexOutOfBoundsException e) {
+        if (dataModel instanceof InstanceTableModel) {
+            setDefaultRenderer(Instance.class, new InstanceTableCellRenderer((InstanceTableModel) dataModel));
         }
     }
 }
