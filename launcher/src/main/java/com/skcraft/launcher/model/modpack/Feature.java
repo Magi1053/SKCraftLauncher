@@ -36,6 +36,7 @@ public class Feature implements Comparable<Feature> {
     private String description;
     private Recommendation recommendation;
     private boolean selected;
+    private int maxMemoryDelta;
 
     public Feature() {
     }
@@ -50,6 +51,7 @@ public class Feature implements Comparable<Feature> {
         setName(feature.getName());
         setDescription(feature.getDescription());
         setSelected(feature.isSelected());
+        setMaxMemoryDelta(feature.getMaxMemoryDelta());
     }
 
     @Override
