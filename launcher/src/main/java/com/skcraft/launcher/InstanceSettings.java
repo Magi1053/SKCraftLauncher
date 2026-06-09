@@ -11,4 +11,5 @@ public class InstanceSettings {
 	private JavaRuntime runtime;
 	private MemorySettings memorySettings;
 	private String customJvmArgs;
+	private boolean modpackJvmArgsEnabled = true;
 }

@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 
 import static com.skcraft.launcher.LauncherUtils.checkInterrupted;
@@ -57,6 +58,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
     private final Session session;
     private final File extractDir;
     private final BiPredicate<JavaRuntime, JavaVersion> javaRuntimeMismatch;
+    private final BiFunction<Integer, Integer, MemoryVerificationResult> memoryRequirementMismatch;
     @Getter @Setter private Environment environment = Environment.getInstance();
 
     private VersionManifest versionManifest;
@@ -69,20 +71,24 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
     /**
      * Create a new instance launcher.
-     *  @param launcher the launcher
-     * @param instance the instance
-     * @param session the session
-     * @param extractDir the directory to extract to
+     * 
+     * @param launcher                  the launcher
+     * @param instance                  the instance
+     * @param session                   the session
+     * @param extractDir                the directory to extract to
      * @param javaRuntimeMismatch
+     * @param memoryRequirementMismatch
      */
     public Runner(@NonNull Launcher launcher, @NonNull Instance instance,
-                  @NonNull Session session, @NonNull File extractDir,
-                  BiPredicate<JavaRuntime, JavaVersion> javaRuntimeMismatch) {
+            @NonNull Session session, @NonNull File extractDir,
+            BiPredicate<JavaRuntime, JavaVersion> javaRuntimeMismatch,
+            BiFunction<Integer, Integer, MemoryVerificationResult> memoryRequirementMismatch) {
         this.launcher = launcher;
         this.instance = instance;
         this.session = session;
         this.extractDir = extractDir;
         this.javaRuntimeMismatch = javaRuntimeMismatch;
+        this.memoryRequirementMismatch = memoryRequirementMismatch;
         this.featureList = new FeatureList.Mutable();
     }
 
@@ -152,6 +158,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         addLegacyArgs();
 
         callLaunchModifier();
+        verifyMemoryRequirement();
 
         verifyJavaRuntime();
 
@@ -187,6 +194,49 @@ public class Runner implements Callable<Process>, ProgressObservable {
                 throw new CancellationException("Launch cancelled by user.");
             }
         }
+    }
+
+    private void verifyMemoryRequirement() {
+        if (instance.getLaunchModifier() == null || memoryRequirementMismatch == null) {
+            return;
+        }
+
+        int requiredMaxMemory = instance.getLaunchModifier().getMaxMemory();
+        int currentMaxMemory = builder.getMaxMemory();
+
+        if (requiredMaxMemory <= 0 || currentMaxMemory >= requiredMaxMemory) {
+            return;
+        }
+
+        MemoryVerificationResult result = memoryRequirementMismatch.apply(currentMaxMemory, requiredMaxMemory);
+        if (result == MemoryVerificationResult.CANCEL) {
+            throw new CancellationException("Launch cancelled by user.");
+        }
+
+        if (result == MemoryVerificationResult.UPDATE_INSTANCE_SETTINGS) {
+            MemorySettings memorySettings = instance.getSettings().getMemorySettings();
+            if (memorySettings == null) {
+                memorySettings = new MemorySettings();
+                instance.getSettings().setMemorySettings(memorySettings);
+            }
+
+            int requiredMinMemory = instance.getLaunchModifier().getMinMemory();
+            memorySettings.setMaxMemory(requiredMaxMemory);
+            memorySettings.setMinMemory(requiredMinMemory > 0 ? requiredMinMemory : requiredMaxMemory);
+            if (memorySettings.getMinMemory() > memorySettings.getMaxMemory()) {
+                memorySettings.setMinMemory(memorySettings.getMaxMemory());
+            }
+            Persistence.commitAndForget(instance);
+
+            builder.setMinMemory(memorySettings.getMinMemory());
+            builder.setMaxMemory(memorySettings.getMaxMemory());
+        }
+    }
+
+    public enum MemoryVerificationResult {
+        CANCEL,
+        UPDATE_INSTANCE_SETTINGS,
+        LAUNCH_ANYWAY
     }
 
     /**
@@ -242,61 +292,23 @@ public class Runner implements Callable<Process>, ProgressObservable {
      * @throws IOException on I/O error
      */
     private void addJvmArgs() throws IOException, LauncherException {
-        Optional<MemorySettings> memorySettings = Optional.ofNullable(instance.getSettings().getMemorySettings());
-
-        int minMemory = memorySettings
-                .map(MemorySettings::getMinMemory)
-                .orElse(config.getMinMemory());
-
-        int maxMemory = memorySettings
-                .map(MemorySettings::getMaxMemory)
-                .orElse(config.getMaxMemory());
-
-        int permGen = config.getPermGen();
-
-        if (minMemory <= 0) {
-            minMemory = 1024;
-        }
-
-        if (maxMemory <= 0) {
-            maxMemory = 1024;
-        }
-
-        if (permGen <= 0) {
-            permGen = 128;
-        }
-
-        if (permGen <= 64) {
-            permGen = 64;
-        }
-
-        if (minMemory > maxMemory) {
-            maxMemory = minMemory;
-        }
-
-        builder.setMinMemory(minMemory);
-        builder.setMaxMemory(maxMemory);
-        builder.setPermGen(permGen);
+        MemorySettings.Resolved memory = MemorySettings.resolve(instance);
+        builder.setMinMemory(memory.getMinMemory());
+        builder.setMaxMemory(memory.getMaxMemory());
 
         JavaRuntime selectedRuntime = Optional.ofNullable(instance.getSettings().getRuntime())
                 .orElseGet(() -> Optional.ofNullable(versionManifest.getJavaVersion())
                         .flatMap(JavaRuntimeFinder::findBestJavaRuntime)
-                        .orElse(config.getJavaRuntime())
+                        .orElse(null)
                 );
 
         // Builder defaults to the PATH `java` if the runtime is null
         builder.setRuntime(selectedRuntime);
 
         List<String> flags = builder.getFlags();
-        String[] rawJvmArgsList = new String[] {
-                config.getJvmArgs(),
-                instance.getSettings().getCustomJvmArgs()
-        };
-
-        for (String rawJvmArgs : rawJvmArgsList) {
-            if (!Strings.isNullOrEmpty(rawJvmArgs)) {
-                flags.addAll(JavaProcessBuilder.splitArgs(rawJvmArgs));
-            }
+        String rawJvmArgs = instance.getSettings().getCustomJvmArgs();
+        if (!Strings.isNullOrEmpty(rawJvmArgs)) {
+            flags.addAll(JavaProcessBuilder.splitArgs(rawJvmArgs));
         }
 
         List<GameArgument> javaArguments = versionManifest.getArguments().getJvmArguments();

@@ -7,23 +7,18 @@
 package com.skcraft.launcher.dialog;
 
 import com.skcraft.launcher.Configuration;
+import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.Launcher;
-import com.skcraft.launcher.dialog.component.BetterComboBox;
-import com.skcraft.launcher.launch.runtime.AddJavaRuntime;
-import com.skcraft.launcher.launch.runtime.JavaRuntime;
-import com.skcraft.launcher.launch.runtime.JavaRuntimeFinder;
 import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.*;
 import com.skcraft.launcher.util.SharedLocale;
 import lombok.NonNull;
+import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
-import javax.swing.filechooser.FileFilter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.File;
-import java.util.Arrays;
 
 /**
  * A dialog to modify configuration options.
@@ -31,16 +26,12 @@ import java.util.Arrays;
 public class ConfigurationDialog extends JDialog {
 
     private final Configuration config;
+    private final Launcher launcher;
     private final ObjectSwingMapper mapper;
 
     private final JPanel tabContainer = new JPanel(new BorderLayout());
     private final JTabbedPane tabbedPane = new JTabbedPane();
-    private final FormPanel javaSettingsPanel = new FormPanel();
-    private final JComboBox<JavaRuntime> jvmRuntime = new BetterComboBox<>();
-    private final JTextField jvmArgsText = new JTextField();
-    private final JSpinner minMemorySpinner = new JSpinner();
-    private final JSpinner maxMemorySpinner = new JSpinner();
-    private final JSpinner permGenSpinner = new JSpinner();
+    private final JPanel instanceSettingsPanel = new JPanel(new MigLayout("fillx, wrap 1, ins 12", "[grow]", ""));
     private final FormPanel gameSettingsPanel = new FormPanel();
     private final JSpinner widthSpinner = new JSpinner();
     private final JSpinner heightSpinner = new JSpinner();
@@ -68,33 +59,16 @@ public class ConfigurationDialog extends JDialog {
         super(owner, ModalityType.DOCUMENT_MODAL);
 
         this.config = launcher.getConfig();
+        this.launcher = launcher;
         mapper = new ObjectSwingMapper(config);
 
-        JavaRuntime[] javaRuntimes = JavaRuntimeFinder.getAvailableRuntimes().toArray(new JavaRuntime[0]);
-        DefaultComboBoxModel<JavaRuntime> model = new DefaultComboBoxModel<>(javaRuntimes);
-
-        // Put the runtime from the config in the model if it isn't
-        boolean configRuntimeFound = Arrays.stream(javaRuntimes).anyMatch(r -> r.equals(config.getJavaRuntime()));
-        if (!configRuntimeFound && config.getJavaRuntime() != null) {
-            model.insertElementAt(config.getJavaRuntime(), 0);
-        }
-
-        jvmRuntime.setModel(model);
-        jvmRuntime.addItem(AddJavaRuntime.ADD_RUNTIME_SENTINEL);
-
-        jvmRuntime.setSelectedItem(config.getJavaRuntime());
-
         setTitle(SharedLocale.tr("options.title"));
-        initComponents(); // Must be called after jvmRuntime model setup
+        initComponents();
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setSize(new Dimension(400, 500));
         setResizable(false);
         setLocationRelativeTo(owner);
 
-        mapper.map(jvmArgsText, "jvmArgs");
-        mapper.map(minMemorySpinner, "minMemory");
-        mapper.map(maxMemorySpinner, "maxMemory");
-        mapper.map(permGenSpinner, "permGen");
         mapper.map(widthSpinner, "windowWidth");
         mapper.map(heightSpinner, "windowHeight");
         mapper.map(useProxyCheck, "proxyEnabled");
@@ -108,15 +82,9 @@ public class ConfigurationDialog extends JDialog {
     }
 
     private void initComponents() {
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.jvmPath")), jvmRuntime);
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.jvmArguments")), jvmArgsText);
-        javaSettingsPanel.addRow(Box.createVerticalStrut(15));
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.64BitJavaWarning")));
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.minMemory")), minMemorySpinner);
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.maxMemory")), maxMemorySpinner);
-        javaSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.permGen")), permGenSpinner);
-        SwingHelper.removeOpaqueness(javaSettingsPanel);
-        tabbedPane.addTab(SharedLocale.tr("options.javaTab"), SwingHelper.alignTabbedPane(javaSettingsPanel));
+        buildInstanceSettingsPanel();
+        SwingHelper.removeOpaqueness(instanceSettingsPanel);
+        tabbedPane.addTab(SharedLocale.tr("options.instancesTab"), new JScrollPane(instanceSettingsPanel));
 
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowWidth")), widthSpinner);
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowHeight")), heightSpinner);
@@ -171,27 +139,77 @@ public class ConfigurationDialog extends JDialog {
             }
         });
 
-        jvmRuntime.addActionListener(e -> {
-            // A little fun hack...
-            if (jvmRuntime.getSelectedItem() == AddJavaRuntime.ADD_RUNTIME_SENTINEL) {
-                jvmRuntime.setSelectedItem(null);
-                jvmRuntime.setPopupVisible(false);
+    }
 
-                JFileChooser chooser = new JFileChooser();
-                chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                chooser.setFileFilter(new JavaRuntimeFileFilter());
-                chooser.setDialogTitle("Choose a Java executable");
+    private void buildInstanceSettingsPanel() {
+        JLabel titleLabel = new JLabel(SharedLocale.tr("options.instancesTitle"));
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+        instanceSettingsPanel.add(titleLabel, "growx");
 
-                int result = chooser.showOpenDialog(this);
-                if (result == JFileChooser.APPROVE_OPTION) {
-                    JavaRuntime runtime = JavaRuntimeFinder.getRuntimeFromPath(chooser.getSelectedFile().getAbsolutePath());
+        JTextArea explanation = new JTextArea(SharedLocale.tr("options.instancesDescription"));
+        explanation.setEditable(false);
+        explanation.setFocusable(false);
+        explanation.setLineWrap(true);
+        explanation.setWrapStyleWord(true);
+        explanation.setOpaque(false);
+        explanation.setFont(UIManager.getFont("Label.font"));
+        explanation.setForeground(UIManager.getColor("Label.foreground"));
+        explanation.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+        instanceSettingsPanel.add(explanation, "growx");
 
-                    MutableComboBoxModel<JavaRuntime> model = (MutableComboBoxModel<JavaRuntime>) jvmRuntime.getModel();
-                    model.insertElementAt(runtime, 0);
-                    jvmRuntime.setSelectedItem(runtime);
-                }
-            }
-        });
+        if (launcher.getInstances().size() == 0) {
+            instanceSettingsPanel.add(new JLabel(SharedLocale.tr("options.noInstances")), "growx");
+            return;
+        }
+
+        for (int i = 0; i < launcher.getInstances().size(); i++) {
+            Instance instance = launcher.getInstances().get(i);
+            JButton settingsButton = new JButton(SharedLocale.tr("options.instanceJavaSettings"));
+            settingsButton.addActionListener(e -> {
+                dispose();
+                InstanceSettingsDialog.open(getOwner(), instance);
+            });
+
+            instanceSettingsPanel.add(createInstanceSettingsRow(instance, settingsButton), "growx");
+        }
+    }
+
+    private JPanel createInstanceSettingsRow(Instance instance, JButton settingsButton) {
+        JPanel row = new JPanel(new MigLayout("fillx, ins 8 0 8 0", "[grow]push[]", "[][]"));
+        row.setOpaque(false);
+        Color separatorColor = UIManager.getColor("Separator.foreground");
+        if (separatorColor == null) {
+            separatorColor = UIManager.getColor("Panel.background");
+        }
+        if (separatorColor == null) {
+            separatorColor = Color.LIGHT_GRAY;
+        } else {
+            separatorColor = separatorColor.darker();
+        }
+        row.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, separatorColor));
+
+        JLabel titleLabel = new JLabel(instance.getTitle());
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+        row.add(titleLabel, "growx");
+        row.add(settingsButton, "spany 2, aligny center, wrap");
+
+        JLabel descriptionLabel = new JLabel(getInstanceSettingsDescription(instance));
+        descriptionLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        row.add(descriptionLabel, "growx");
+
+        return row;
+    }
+
+    private String getInstanceSettingsDescription(Instance instance) {
+        if (!instance.isLocal()) {
+            return SharedLocale.tr("options.instanceNotInstalled");
+        }
+
+        if (instance.isUpdatePending()) {
+            return SharedLocale.tr("options.instanceUpdatePending");
+        }
+
+        return SharedLocale.tr("options.instanceInstalled");
     }
 
     /**
@@ -199,21 +217,8 @@ public class ConfigurationDialog extends JDialog {
      */
     public void save() {
         mapper.copyFromSwing();
-        config.setJavaRuntime((JavaRuntime) jvmRuntime.getSelectedItem());
 
         Persistence.commitAndForget(config);
         dispose();
-    }
-
-    static class JavaRuntimeFileFilter extends FileFilter {
-        @Override
-        public boolean accept(File f) {
-            return f.isDirectory() || f.getName().startsWith("java") && f.canExecute();
-        }
-
-        @Override
-        public String getDescription() {
-            return "Java runtime executables";
-        }
     }
 }

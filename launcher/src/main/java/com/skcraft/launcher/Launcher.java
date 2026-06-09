@@ -23,7 +23,6 @@ import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.HttpRequest;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SimpleLogFormatter;
-import com.sun.management.OperatingSystemMXBean;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -36,7 +35,6 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.lang.management.ManagementFactory;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Locale;
@@ -96,40 +94,12 @@ public final class Launcher {
         this.config = Persistence.load(new File(configDir, "config.json"), Configuration.class);
         this.accounts = Persistence.load(new File(configDir, "accounts.dat"), AccountList.class);
 
-        setDefaultConfig();
-
         executor.submit(new Runnable() {
             @Override
             public void run() {
                 cleanupExtractDir();
             }
         });
-
-        updateManager.checkForUpdate(null);
-    }
-
-    /**
-     * Updates any incorrect / unset configuration settings with defaults.
-     */
-    public void setDefaultConfig() {
-        double configMax = config.getMaxMemory() / 1024.0;
-        double suggestedMax = 2;
-        double available = Double.MAX_VALUE;
-
-        try {
-            OperatingSystemMXBean bean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-            available = bean.getTotalPhysicalMemorySize() / 1024.0 / 1024.0 / 1024.0;
-            if (available <= 6) {
-                suggestedMax = available * 0.48;
-            } else {
-                suggestedMax = 4;
-            }
-        } catch (Exception ignored) {
-        }
-
-        if (config.getMaxMemory() <= 0 || configMax >= available - 1) {
-            config.setMaxMemory((int) (suggestedMax * 1024));
-        }
     }
 
     /**
@@ -331,10 +301,28 @@ public final class Launcher {
      * @return the news URL
      */
     public URL getNewsURL() {
+        return getNewsURL(null);
+    }
+
+    /**
+     * Get the news URL for an instance.
+     *
+     * @param instance the instance, or null if no instance is selected
+     * @return the news URL
+     */
+    public URL getNewsURL(Instance instance) {
         try {
+            String version = URLEncoder.encode(getVersion(), "UTF-8");
+            String modpackSlug = instance != null ? Strings.nullToEmpty(instance.getName()) : "";
+            String newsUrl = getProperties().getProperty("newsUrl");
+            if (instance != null && instance.getNewsUrl() != null) {
+                newsUrl = instance.getNewsUrl();
+            }
+
             return HttpRequest.url(
-                    String.format(getProperties().getProperty("newsUrl"),
-                            URLEncoder.encode(getVersion(), "UTF-8")));
+                    String.format(newsUrl,
+                            version,
+                            URLEncoder.encode(modpackSlug, "UTF-8")));
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         }

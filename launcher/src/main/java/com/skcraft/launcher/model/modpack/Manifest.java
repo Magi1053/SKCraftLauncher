@@ -7,12 +7,14 @@
 package com.skcraft.launcher.model.modpack;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Strings;
 import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.LauncherUtils;
 import com.skcraft.launcher.install.Installer;
+import com.skcraft.launcher.launch.MemorySettings;
 import com.skcraft.launcher.model.loader.LoaderManifest;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
 import lombok.Data;
@@ -29,6 +31,7 @@ import java.util.Map;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Manifest extends BaseManifest {
 
     public static final int MIN_PROTOCOL_VERSION = 3;
@@ -93,6 +96,25 @@ public class Manifest extends BaseManifest {
     }
 
     public void update(Instance instance) {
-        instance.setLaunchModifier(getLaunchModifier());
+        LaunchModifier modifier = getLaunchModifier();
+        int delta = 0;
+
+        for (Feature feature : features) {
+            if (feature != null && feature.isSelected() && feature.getMaxMemoryDelta() > 0) {
+                delta += feature.getMaxMemoryDelta();
+            }
+        }
+
+        if (delta > 0) {
+            modifier = new LaunchModifier(modifier);
+            modifier.setMinMemory(modifier.getMinMemory() + delta);
+            modifier.setMaxMemory(modifier.getMaxMemory() + delta);
+        }
+
+        instance.setLaunchModifier(modifier);
+
+        if (!instance.isInstalled() || instance.getSettings().getMemorySettings() == null) {
+            MemorySettings.applyFromLaunchModifier(instance, modifier);
+        }
     }
 }

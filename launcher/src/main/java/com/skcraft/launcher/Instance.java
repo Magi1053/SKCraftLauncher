@@ -8,6 +8,7 @@ package com.skcraft.launcher;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Strings;
 import com.google.common.io.Files;
 import com.skcraft.launcher.launch.JavaProcessBuilder;
 import com.skcraft.launcher.model.modpack.LaunchModifier;
@@ -28,6 +29,7 @@ public class Instance implements Comparable<Instance> {
     private String title;
     private String name;
     private String version;
+    private String newsUrl;
     private boolean updatePending;
     private boolean installed;
     private Date lastAccessed;
@@ -51,6 +53,18 @@ public class Instance implements Comparable<Instance> {
         return title != null ? title : name;
     }
 
+    public String getNewsUrl() {
+        return normalizeNewsUrl(newsUrl);
+    }
+
+    public void setNewsUrl(String newsUrl) {
+        this.newsUrl = normalizeNewsUrl(newsUrl);
+    }
+
+    private static String normalizeNewsUrl(String newsUrl) {
+        return Strings.emptyToNull(Strings.nullToEmpty(newsUrl).trim());
+    }
+
     /**
      * Update the given process builder with launch settings that are
      * specific to this instance.
@@ -58,7 +72,7 @@ public class Instance implements Comparable<Instance> {
      * @param builder the process builder
      */
     public void modify(JavaProcessBuilder builder) {
-        if (launchModifier != null) {
+        if (launchModifier != null && settings.isModpackJvmArgsEnabled()) {
             launchModifier.modify(builder);
         }
     }

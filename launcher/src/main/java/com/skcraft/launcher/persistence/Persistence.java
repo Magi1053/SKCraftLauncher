@@ -79,7 +79,7 @@ public final class Persistence {
         Closer closer = Closer.create();
         try {
             OutputStream os = closer.register(sink.openBufferedStream());
-            mapper.writeValue(os, object);
+            mapper.writerWithDefaultPrettyPrinter().writeValue(os, object);
         } finally {
             closer.close();
         }

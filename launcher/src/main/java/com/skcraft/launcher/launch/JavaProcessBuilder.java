@@ -31,7 +31,6 @@ public class JavaProcessBuilder {
     @Getter @Setter private JavaRuntime runtime;
     @Getter @Setter private int minMemory;
     @Getter @Setter private int maxMemory;
-    @Getter @Setter private int permGen;
 
     @Getter private final List<File> classPath = new ArrayList<File>();
     @Getter private final List<String> flags = new ArrayList<String>();
@@ -102,13 +101,6 @@ public class JavaProcessBuilder {
 
         if (maxMemory > 0) {
             command.add("-Xmx" + maxMemory + "M");
-        }
-
-        if (permGen > 0) {
-            // If we know the Java version, only add permsize for 7 or older
-            if (getRuntime() == null || getRuntime().getMajorVersion() < 8) {
-                command.add("-XX:MaxPermSize=" + permGen + "M");
-            }
         }
 
         command.add(mainClass);

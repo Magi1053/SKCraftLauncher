@@ -1,5 +1,7 @@
 package com.skcraft.launcher.launch.runtime;
 
+import com.skcraft.launcher.util.SharedLocale;
+
 import java.io.File;
 
 /**
@@ -12,7 +14,7 @@ public class AddJavaRuntime extends JavaRuntime {
 
 	@Override
 	public String toString() {
-		return "Add undetected Java runtime...";
+		return SharedLocale.tr("instance.options.addCustomRuntime");
 	}
 
 	public static final AddJavaRuntime ADD_RUNTIME_SENTINEL = new AddJavaRuntime();

@@ -127,7 +127,7 @@ public class LaunchSupervisor {
         final File extractDir = launcher.createExtractDir();
 
         // Get the process
-        Runner task = new Runner(launcher, instance, session, extractDir, new RuntimeVerifier(instance));
+        Runner task = new Runner(launcher, instance, session, extractDir, new RuntimeVerifier(instance), null);
         ObservableFuture<Process> processFuture = new ObservableFuture<Process>(
                 launcher.getExecutor().submit(task), task);
 
