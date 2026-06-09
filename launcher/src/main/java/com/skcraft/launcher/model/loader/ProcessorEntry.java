@@ -8,6 +8,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -20,8 +22,19 @@ public class ProcessorEntry extends ManifestEntry {
 	public void install(Installer installer, InstallLog log, UpdateCache cache, InstallExtras extras) throws Exception {
 		LocalLoader loader = extras.getLoader(loaderName);
 
-		if (processor.shouldRunOn(Side.CLIENT)) {
-			installer.queueLate(new ProcessorTask(processor, loader.getManifest(), getManifest(), loader.getLocalFiles()));
+		if (!processor.shouldRunOn(Side.CLIENT)) {
+			return;
 		}
+
+		String cacheKey = "processor:" + loaderName + ":" + processor.getJar();
+		List<String> args = processor.getArgs();
+		if (args != null) {
+			cacheKey += ":" + String.join(":", args);
+		}
+		if (!cache.mark(cacheKey, loaderName)) {
+			return;
+		}
+
+		installer.queueLate(new ProcessorTask(processor, loader.getManifest(), getManifest(), loader.getLocalFiles()));
 	}
 }
