@@ -6,6 +6,7 @@
 
 package com.skcraft.launcher.creator.controller;
 
+import com.google.common.base.Strings;
 import com.skcraft.launcher.creator.dialog.ManifestEntryDialog;
 import com.skcraft.launcher.creator.model.creator.ManifestEntry;
 import com.skcraft.launcher.swing.SwingHelper;
@@ -28,12 +29,14 @@ public class ManifestEntryController {
     private void copyFrom() {
         dialog.getIncludeCheck().setSelected(manifestEntry.isSelected());
         dialog.getPrioritySpinner().setValue(manifestEntry.getManifestInfo().getPriority());
+        SwingHelper.setTextAndResetCaret(dialog.getNewsUrlText(), manifestEntry.getManifestInfo().getNewsUrl());
         SwingHelper.setTextAndResetCaret(dialog.getGameKeysText(), SwingHelper.listToLines(manifestEntry.getGameKeys()));
     }
 
     private void copyTo() {
         manifestEntry.setSelected(dialog.getIncludeCheck().isSelected());
         manifestEntry.getManifestInfo().setPriority((Integer) dialog.getPrioritySpinner().getValue());
+        manifestEntry.getManifestInfo().setNewsUrl(Strings.emptyToNull(dialog.getNewsUrlText().getText().trim()));
         manifestEntry.setGameKeys(SwingHelper.linesToList(dialog.getGameKeysText().getText()));
     }
 

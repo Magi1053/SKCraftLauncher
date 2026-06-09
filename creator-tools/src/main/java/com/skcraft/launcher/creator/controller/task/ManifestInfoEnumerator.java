@@ -45,6 +45,7 @@ public class ManifestInfoEnumerator implements Function<List<ManifestEntry>, Lis
                     for (ManifestEntry entry : entries) {
                         if (entry.getManifestInfo().getLocation().equals(location)) {
                             info.setPriority(entry.getManifestInfo().getPriority());
+                            info.setNewsUrl(entry.getManifestInfo().getNewsUrl());
                             entry.setManifestInfo(info);
                             found = true;
                             break;

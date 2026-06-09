@@ -58,6 +58,9 @@ public enum ListingType {
                 builder.append("    'version' => '").append(escape(info.getVersion())).append("',\r\n");
                 builder.append("    'priority' => ").append(info.getPriority()).append(",\r\n");
                 builder.append("    'location' => '").append(escape(info.getLocation())).append("',\r\n");
+                if (info.getNewsUrl() != null) {
+                    builder.append("    'newsUrl' => '").append(escape(info.getNewsUrl())).append("',\r\n");
+                }
                 builder.append(");\r\n\r\n");
             }
 

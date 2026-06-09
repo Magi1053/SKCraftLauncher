@@ -33,8 +33,10 @@ public class ManifestEntryTableModel extends AbstractTableModel {
             case 3:
                 return "Priority";
             case 4:
-                return "Location";
+                return "News URL";
             case 5:
+                return "Location";
+            case 6:
                 return "Game Keys";
             default:
                 return null;
@@ -55,6 +57,8 @@ public class ManifestEntryTableModel extends AbstractTableModel {
             case 4:
                 return String.class;
             case 5:
+                return String.class;
+            case 6:
                 return String.class;
             default:
                 return null;
@@ -88,7 +92,7 @@ public class ManifestEntryTableModel extends AbstractTableModel {
 
     @Override
     public int getColumnCount() {
-        return 6;
+        return 7;
     }
 
     @Override
@@ -110,8 +114,10 @@ public class ManifestEntryTableModel extends AbstractTableModel {
             case 3:
                 return entry.getManifestInfo().getPriority();
             case 4:
-                return entry.getManifestInfo().getLocation();
+                return entry.getManifestInfo().getNewsUrl();
             case 5:
+                return entry.getManifestInfo().getLocation();
+            case 6:
                 List<String> gameKeys = entry.getGameKeys();
                 return gameKeys != null ? GAME_KEY_JOINER.join(gameKeys) : "";
             default:

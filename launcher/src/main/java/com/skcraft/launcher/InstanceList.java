@@ -155,6 +155,7 @@ public class InstanceList {
                             instance.setPriority(manifest.getPriority());
                             URL url = concat(packagesURL, manifest.getLocation());
                             instance.setManifestURL(url);
+                            instance.setNewsUrl(manifest.getNewsUrl());
 
                             log.info("(" + instance.getName() + ").setManifestURL(" + url + ")");
 
@@ -181,6 +182,7 @@ public class InstanceList {
                         instance.setManifestURL(concat(packagesURL, manifest.getLocation()));
                         instance.setUpdatePending(true);
                         instance.setLocal(false);
+                        instance.setNewsUrl(manifest.getNewsUrl());
                         remote.add(instance);
 
                         log.info("Available remote instance: '" + instance.getName() +
