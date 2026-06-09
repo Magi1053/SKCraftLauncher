@@ -2,15 +2,24 @@ package com.skcraft.launcher.dialog;
 
 import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.InstanceSettings;
-import com.skcraft.launcher.dialog.component.BetterComboBox;
+import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.launch.JavaProcessBuilder;
 import com.skcraft.launcher.launch.MemorySettings;
 import com.skcraft.launcher.launch.runtime.AddJavaRuntime;
 import com.skcraft.launcher.launch.runtime.JavaRuntime;
 import com.skcraft.launcher.launch.runtime.JavaRuntimeFinder;
+import com.skcraft.launcher.model.minecraft.JavaVersion;
+import com.skcraft.launcher.model.minecraft.VersionManifest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.FormPanel;
+import com.skcraft.launcher.swing.GroupedComboBox;
 import com.skcraft.launcher.swing.LinedBoxPanel;
+import com.skcraft.launcher.swing.SwingHelper;
+import com.skcraft.launcher.update.runtime.JavaVersionResolver;
+import com.skcraft.launcher.update.runtime.ManagedRuntimeOption;
+import com.skcraft.launcher.model.minecraft.runtime.RuntimePlatform;
+import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.SharedLocale;
 
 import javax.swing.*;
@@ -20,10 +29,14 @@ import javax.swing.filechooser.FileFilter;
 import java.awt.*;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class InstanceSettingsDialog extends JDialog {
+	private static final ObjectMapper VERSION_MAPPER = new ObjectMapper();
+
+	private final Launcher launcher;
 	private final Instance instance;
 	private final InstanceSettings settings;
 
@@ -33,7 +46,7 @@ public class InstanceSettingsDialog extends JDialog {
 	private final JSpinner maxMemorySpinner = new JSpinner();
 
 	private final FormPanel runtimePanel = new FormPanel();
-	private final JComboBox<JavaRuntime> javaRuntimeBox = new BetterComboBox<>();
+	private JComboBox<Object> javaRuntimeBox;
 	private final JTextArea userJavaArgsText = new JTextArea(4, 30);
 	private final JScrollPane userJavaArgsScroll = new JScrollPane(userJavaArgsText);
 	private final JCheckBox modpackJvmArgsCheck = new JCheckBox(SharedLocale.tr("instance.options.useModpackJvmArguments"));
@@ -45,8 +58,9 @@ public class InstanceSettingsDialog extends JDialog {
 
 	private boolean saved = false;
 
-	public InstanceSettingsDialog(Window owner, Instance instance) {
+	public InstanceSettingsDialog(Window owner, Launcher launcher, Instance instance) {
 		super(owner);
+		this.launcher = launcher;
 		this.instance = instance;
 		this.settings = instance.getSettings();
 
@@ -66,28 +80,142 @@ public class InstanceSettingsDialog extends JDialog {
 	}
 
 	private void initJavaRuntimeBox() {
-		JavaRuntime[] javaRuntimes = JavaRuntimeFinder.getAvailableRuntimes().toArray(new JavaRuntime[0]);
-		DefaultComboBoxModel<JavaRuntime> model = new DefaultComboBoxModel<>();
+		GroupedComboBox.Model model = new GroupedComboBox.Model();
 		model.addElement(null);
-		for (JavaRuntime javaRuntime : javaRuntimes) {
+
+		List<ManagedRuntimeOption> managedOptions = new ArrayList<>();
+		try {
+			managedOptions.addAll(launcher.getRuntimeManager()
+					.fetchManagedRuntimes(launcher.propUrl("runtimeManifestUrl")));
+		} catch (Exception e) {
+			SwingHelper.showErrorDialog(this,
+					SharedLocale.tr("instance.options.managedRuntimeLoadFailed"),
+					SharedLocale.tr("instance.options.managedRuntimeLoadFailedTitle"), e);
+		}
+
+		Set<JavaRuntime> managedDirs = new HashSet<>();
+		for (ManagedRuntimeOption option : managedOptions) {
+			if (option.getRuntime() != null) {
+				managedDirs.add(option.getRuntime());
+			}
+		}
+
+		model.addGroup(SharedLocale.tr("instance.options.runtimeGroupManaged"));
+		for (ManagedRuntimeOption option : managedOptions) {
+			model.addElement(option);
+		}
+		if (settings.getManagedRuntimeComponent() != null
+				&& !containsManagedComponent(model, settings.getManagedRuntimeComponent())) {
+			model.addElement(createSavedManagedRuntimeOption(settings.getManagedRuntimeComponent()));
+		}
+
+		Set<JavaRuntime> systemRuntimes = new HashSet<>(JavaRuntimeFinder.getAvailableRuntimes());
+		systemRuntimes.removeAll(managedDirs);
+		model.addGroup(SharedLocale.tr("instance.options.runtimeGroupSystem"));
+		for (JavaRuntime javaRuntime : systemRuntimes.stream().sorted().toArray(JavaRuntime[]::new)) {
 			model.addElement(javaRuntime);
 		}
-		if (settings.getRuntime() != null && Arrays.stream(javaRuntimes).noneMatch(r -> r.equals(settings.getRuntime()))) {
-			model.insertElementAt(settings.getRuntime(), 1);
+		if (settings.getRuntime() != null && !containsRuntime(model, settings.getRuntime())) {
+			model.addElement(settings.getRuntime());
 		}
 		model.addElement(AddJavaRuntime.ADD_RUNTIME_SENTINEL);
 
-		javaRuntimeBox.setModel(model);
-		javaRuntimeBox.setRenderer(new DefaultListCellRenderer() {
-			@Override
-			public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-				if (value == null) {
-					setText(SharedLocale.tr("instance.options.automaticJava"));
-				}
-				return this;
+		javaRuntimeBox = GroupedComboBox.create(model, this::formatRuntimeOptionLabel);
+	}
+
+	private String formatRuntimeOptionLabel(Object value) {
+		if (value instanceof GroupedComboBox.Group) {
+			return ((GroupedComboBox.Group) value).getLabel();
+		}
+		if (value == null) {
+			return getAutomaticRuntimeLabel();
+		}
+		if (value instanceof ManagedRuntimeOption) {
+			return ((ManagedRuntimeOption) value).getDisplayLabel();
+		}
+		if (value instanceof AddJavaRuntime) {
+			return value.toString();
+		}
+		if (value instanceof JavaRuntime) {
+			return formatSystemRuntimeLabel((JavaRuntime) value);
+		}
+		return String.valueOf(value);
+	}
+
+	private String getAutomaticRuntimeLabel() {
+		JavaVersion requiredVersion = readRequiredJavaVersion();
+		if (requiredVersion != null && requiredVersion.getMajorVersion() > 0) {
+			return SharedLocale.tr("instance.options.automaticRuntimeWithVersion",
+					ManagedRuntimeOption.formatJavaMajorVersion(requiredVersion.getMajorVersion()));
+		}
+		return SharedLocale.tr("instance.options.automaticRuntime");
+	}
+
+	private JavaVersion readRequiredJavaVersion() {
+		if (!instance.getVersionPath().isFile()) {
+			return null;
+		}
+
+		try {
+			VersionManifest version = VERSION_MAPPER.readValue(instance.getVersionPath(), VersionManifest.class);
+			return JavaVersionResolver.resolve(launcher, instance, version);
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private static String formatSystemRuntimeLabel(JavaRuntime runtime) {
+		String version = runtime.getVersion() != null ? runtime.getVersion() : "unknown";
+		return ManagedRuntimeOption.formatLabel(version, runtime.is64Bit(), runtime.getDir().getAbsolutePath());
+	}
+
+	private static boolean containsRuntime(ComboBoxModel<Object> model, JavaRuntime runtime) {
+		for (int i = 0; i < model.getSize(); i++) {
+			Object element = model.getElementAt(i);
+			if (!GroupedComboBox.isOption(element)) {
+				continue;
 			}
-		});
+			if (element instanceof JavaRuntime && runtime.equals(element)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private ManagedRuntimeOption createSavedManagedRuntimeOption(String component) {
+		JavaVersion javaVersion = new JavaVersion();
+		javaVersion.setComponent(component);
+		return launcher.getRuntimeManager().getRuntime(javaVersion)
+				.map(runtime -> new ManagedRuntimeOption(
+						component, runtime.getMajorVersion(), runtime.getVersion(), runtime.is64Bit(), true, runtime))
+				.orElseGet(() -> {
+					RuntimePlatform platform = RuntimePlatform.from(Environment.getInstance());
+					boolean is64Bit = platform != null && platform.is64Bit();
+					return new ManagedRuntimeOption(component, 0, null, is64Bit, false, null);
+				});
+	}
+
+	private static boolean containsManagedComponent(ComboBoxModel<Object> model, String component) {
+		for (int i = 0; i < model.getSize(); i++) {
+			Object element = model.getElementAt(i);
+			if (!GroupedComboBox.isOption(element)) {
+				continue;
+			}
+			if (element instanceof ManagedRuntimeOption
+					&& component.equals(((ManagedRuntimeOption) element).getComponent())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static int indexOfAddRuntimeSentinel(ComboBoxModel<Object> model) {
+		for (int i = 0; i < model.getSize(); i++) {
+			if (model.getElementAt(i) == AddJavaRuntime.ADD_RUNTIME_SENTINEL) {
+				return i;
+			}
+		}
+		return model.getSize();
 	}
 
 	private void initLayout() {
@@ -162,7 +290,7 @@ public class InstanceSettingsDialog extends JDialog {
 
 		javaRuntimeBox.addActionListener(e -> {
 			if (javaRuntimeBox.getSelectedItem() == AddJavaRuntime.ADD_RUNTIME_SENTINEL) {
-				javaRuntimeBox.setSelectedItem(settings.getRuntime());
+				javaRuntimeBox.setSelectedItem(getCurrentRuntimeSelection());
 				javaRuntimeBox.setPopupVisible(false);
 
 				JFileChooser chooser = new JFileChooser();
@@ -174,8 +302,8 @@ public class InstanceSettingsDialog extends JDialog {
 				if (result == JFileChooser.APPROVE_OPTION) {
 					JavaRuntime runtime = JavaRuntimeFinder.getRuntimeFromPath(chooser.getSelectedFile().getAbsolutePath());
 
-					MutableComboBoxModel<JavaRuntime> comboModel = (MutableComboBoxModel<JavaRuntime>) javaRuntimeBox.getModel();
-					comboModel.insertElementAt(runtime, 1);
+					MutableComboBoxModel<Object> comboModel = (MutableComboBoxModel<Object>) javaRuntimeBox.getModel();
+					comboModel.insertElementAt(runtime, indexOfAddRuntimeSentinel(comboModel));
 					javaRuntimeBox.setSelectedItem(runtime);
 				}
 			}
@@ -191,7 +319,7 @@ public class InstanceSettingsDialog extends JDialog {
 			minMemorySpinner.setValue(settings.getMemorySettings().getMinMemory());
 			maxMemorySpinner.setValue(settings.getMemorySettings().getMaxMemory());
 		}
-		javaRuntimeBox.setSelectedItem(settings.getRuntime());
+		javaRuntimeBox.setSelectedItem(getCurrentRuntimeSelection());
 		userJavaArgsText.setText(settings.getCustomJvmArgs() != null ? settings.getCustomJvmArgs() : "");
 		modpackJvmArgsCheck.setSelected(settings.isModpackJvmArgsEnabled());
 		userJavaArgsText.setCaretPosition(0);
@@ -240,6 +368,21 @@ public class InstanceSettingsDialog extends JDialog {
 		return Math.max(minMemory, maxMemory);
 	}
 
+	private Object getCurrentRuntimeSelection() {
+		if (settings.getManagedRuntimeComponent() != null) {
+			ComboBoxModel<Object> model = javaRuntimeBox.getModel();
+			for (int i = 0; i < model.getSize(); i++) {
+				Object element = model.getElementAt(i);
+				if (element instanceof ManagedRuntimeOption
+						&& settings.getManagedRuntimeComponent().equals(((ManagedRuntimeOption) element).getComponent())) {
+					return element;
+				}
+			}
+		}
+
+		return settings.getRuntime();
+	}
+
 	private void save() {
 		MemorySettings memorySettings = settings.getMemorySettings();
 		if (memorySettings == null) {
@@ -249,7 +392,17 @@ public class InstanceSettingsDialog extends JDialog {
 
 		memorySettings.setMinMemory((int) minMemorySpinner.getValue());
 		memorySettings.setMaxMemory((int) maxMemorySpinner.getValue());
-		settings.setRuntime((JavaRuntime) javaRuntimeBox.getSelectedItem());
+		Object selectedRuntime = javaRuntimeBox.getSelectedItem();
+		if (selectedRuntime == null) {
+			settings.setRuntime(null);
+			settings.setManagedRuntimeComponent(null);
+		} else if (selectedRuntime instanceof ManagedRuntimeOption) {
+			settings.setRuntime(null);
+			settings.setManagedRuntimeComponent(((ManagedRuntimeOption) selectedRuntime).getComponent());
+		} else if (selectedRuntime instanceof JavaRuntime) {
+			settings.setRuntime((JavaRuntime) selectedRuntime);
+			settings.setManagedRuntimeComponent(null);
+		}
 		String customJvmArgs = userJavaArgsText.getText().trim();
 		settings.setCustomJvmArgs(customJvmArgs.isEmpty() ? null : customJvmArgs);
 		settings.setModpackJvmArgsEnabled(modpackJvmArgsCheck.isSelected());
@@ -257,8 +410,8 @@ public class InstanceSettingsDialog extends JDialog {
 		saved = true;
 	}
 
-	public static boolean open(Window parent, Instance instance) {
-		InstanceSettingsDialog dialog = new InstanceSettingsDialog(parent, instance);
+	public static boolean open(Window parent, Launcher launcher, Instance instance) {
+		InstanceSettingsDialog dialog = new InstanceSettingsDialog(parent, launcher, instance);
 		dialog.setVisible(true);
 
 		if (dialog.saved) {
@@ -276,7 +429,7 @@ public class InstanceSettingsDialog extends JDialog {
 
 		@Override
 		public String getDescription() {
-			return "Java runtime executables";
+			return "Game Runtime executables";
 		}
 	}
 }

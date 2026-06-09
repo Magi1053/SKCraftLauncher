@@ -243,7 +243,7 @@ public class LauncherFrame extends JFrame {
 
                 menuItem = new JMenuItem(SharedLocale.tr("instance.openSettings"));
                 menuItem.addActionListener(e -> {
-                    InstanceSettingsDialog.open(this, selected);
+                    InstanceSettingsDialog.open(this, launcher, selected);
                 });
                 popup.add(menuItem);
 

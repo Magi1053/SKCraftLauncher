@@ -7,7 +7,9 @@
 package com.skcraft.launcher.builder;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.google.common.collect.Lists;
+import com.skcraft.launcher.model.minecraft.JavaVersion;
 import com.skcraft.launcher.model.modpack.LaunchModifier;
 import com.skcraft.launcher.model.modpack.Manifest;
 import lombok.Data;
@@ -23,6 +25,8 @@ public class BuilderConfig {
     private String name;
     private String title;
     private String gameVersion;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private JavaVersion javaVersion;
     @JsonProperty("launch")
     private LaunchModifier launchModifier = new LaunchModifier();
     private List<FeaturePattern> features = Lists.newArrayList();

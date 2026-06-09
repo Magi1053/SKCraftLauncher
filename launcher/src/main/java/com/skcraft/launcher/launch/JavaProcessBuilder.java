@@ -43,7 +43,7 @@ public class JavaProcessBuilder {
         // Try the parent directory
         if (!path.exists()) {
             throw new IOException(
-                    "The configured Java runtime path '" + path + "' doesn't exist.");
+                    "The configured Game Runtime path '" + path + "' doesn't exist.");
         } else if (path.isFile()) {
             path = path.getParentFile();
         }

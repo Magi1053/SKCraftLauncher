@@ -9,7 +9,12 @@ import lombok.Data;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class InstanceSettings {
 	private JavaRuntime runtime;
+	private String managedRuntimeComponent;
 	private MemorySettings memorySettings;
 	private String customJvmArgs;
 	private boolean modpackJvmArgsEnabled = true;
+
+	public boolean usesAutomaticRuntime() {
+		return runtime == null && managedRuntimeComponent == null;
+	}
 }

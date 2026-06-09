@@ -167,7 +167,7 @@ public class ConfigurationDialog extends JDialog {
             JButton settingsButton = new JButton(SharedLocale.tr("options.instanceJavaSettings"));
             settingsButton.addActionListener(e -> {
                 dispose();
-                InstanceSettingsDialog.open(getOwner(), instance);
+                InstanceSettingsDialog.open(getOwner(), launcher, instance);
             });
 
             instanceSettingsPanel.add(createInstanceSettingsRow(instance, settingsButton), "growx");

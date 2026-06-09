@@ -19,6 +19,7 @@ import com.skcraft.launcher.model.minecraft.Version;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
 import com.skcraft.launcher.model.modpack.Manifest;
 import com.skcraft.launcher.persistence.Persistence;
+import com.skcraft.launcher.update.runtime.JavaVersionResolver;
 import com.skcraft.launcher.util.HttpRequest;
 import com.skcraft.launcher.util.SharedLocale;
 import lombok.Getter;
@@ -125,6 +126,13 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
 
             version.setDownloads(otherManifest.getDownloads());
             version.setAssetIndex(otherManifest.getAssetIndex());
+            if (version.getJavaVersion() == null) {
+                version.setJavaVersion(otherManifest.getJavaVersion());
+            }
+        }
+
+        if (version.getJavaVersion() == null) {
+            version.setJavaVersion(JavaVersionResolver.resolve(launcher, instance, version));
         }
 
         mapper.writeValue(instance.getVersionPath(), version);
@@ -173,6 +181,12 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         VersionManifest version = readVersionManifest(manifest);
 
         progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.buildingDownloadList"));
+
+        // Install the managed Game Runtime only for Automatic runtime selection
+        if (version.getJavaVersion() != null && instance.getSettings().usesAutomaticRuntime()) {
+            log.info("Enumerating Game Runtime...");
+            installRuntime(installer, version.getJavaVersion());
+        }
 
         // Install the .jar
         File jarPath = launcher.getJarPath(version);

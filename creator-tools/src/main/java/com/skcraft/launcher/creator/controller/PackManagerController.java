@@ -523,7 +523,7 @@ public class PackManagerController {
                             return;
                         }
 
-                        InstanceSettingsDialog.open(frame, found);
+                        InstanceSettingsDialog.open(frame, launcher, found);
                     }
 
                     @Override

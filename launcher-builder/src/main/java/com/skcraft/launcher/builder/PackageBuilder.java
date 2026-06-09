@@ -21,6 +21,7 @@ import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.LauncherUtils;
 import com.skcraft.launcher.builder.loaders.*;
 import com.skcraft.launcher.model.loader.BasicInstallProfile;
+import com.skcraft.launcher.model.minecraft.JavaVersion;
 import com.skcraft.launcher.model.minecraft.Library;
 import com.skcraft.launcher.model.minecraft.ReleaseList;
 import com.skcraft.launcher.model.minecraft.Version;
@@ -57,6 +58,7 @@ public class PackageBuilder {
     private ObjectWriter writer;
     private final Manifest manifest;
     private final PropertiesApplicator applicator;
+    private BuilderConfig config;
     @Getter
     private boolean prettyPrint = false;
 
@@ -320,6 +322,7 @@ public class PackageBuilder {
     public void readConfig(File path) throws IOException {
         if (path != null) {
             BuilderConfig config = read(path, BuilderConfig.class);
+            this.config = config;
             config.update(manifest);
             config.registerProperties(applicator);
         }
@@ -353,6 +356,21 @@ public class PackageBuilder {
 
             manifest.setVersionManifest(versionManifest);
         }
+
+        applyJavaVersionOverride();
+    }
+
+    private void applyJavaVersionOverride() {
+        if (config == null || config.getJavaVersion() == null || manifest.getVersionManifest() == null) {
+            return;
+        }
+
+        JavaVersion javaVersion = config.getJavaVersion();
+        if (emptyToNull(javaVersion.getComponent()) == null || javaVersion.getMajorVersion() <= 0) {
+            return;
+        }
+
+        manifest.getVersionManifest().setJavaVersion(javaVersion);
     }
 
     public void writeManifest(@NonNull File path) throws IOException {

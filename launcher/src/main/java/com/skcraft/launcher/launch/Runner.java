@@ -20,6 +20,7 @@ import com.skcraft.launcher.launch.runtime.JavaRuntime;
 import com.skcraft.launcher.launch.runtime.JavaRuntimeFinder;
 import com.skcraft.launcher.model.minecraft.*;
 import com.skcraft.launcher.persistence.Persistence;
+import com.skcraft.launcher.update.runtime.JavaVersionResolver;
 import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.Platform;
 import com.skcraft.launcher.util.SharedLocale;
@@ -39,7 +40,6 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
 
 import static com.skcraft.launcher.LauncherUtils.checkInterrupted;
 import static com.skcraft.launcher.util.SharedLocale.tr;
@@ -57,7 +57,6 @@ public class Runner implements Callable<Process>, ProgressObservable {
     private final Instance instance;
     private final Session session;
     private final File extractDir;
-    private final BiPredicate<JavaRuntime, JavaVersion> javaRuntimeMismatch;
     private final BiFunction<Integer, Integer, MemoryVerificationResult> memoryRequirementMismatch;
     @Getter @Setter private Environment environment = Environment.getInstance();
 
@@ -76,18 +75,15 @@ public class Runner implements Callable<Process>, ProgressObservable {
      * @param instance                  the instance
      * @param session                   the session
      * @param extractDir                the directory to extract to
-     * @param javaRuntimeMismatch
      * @param memoryRequirementMismatch
      */
     public Runner(@NonNull Launcher launcher, @NonNull Instance instance,
             @NonNull Session session, @NonNull File extractDir,
-            BiPredicate<JavaRuntime, JavaVersion> javaRuntimeMismatch,
             BiFunction<Integer, Integer, MemoryVerificationResult> memoryRequirementMismatch) {
         this.launcher = launcher;
         this.instance = instance;
         this.session = session;
         this.extractDir = extractDir;
-        this.javaRuntimeMismatch = javaRuntimeMismatch;
         this.memoryRequirementMismatch = memoryRequirementMismatch;
         this.featureList = new FeatureList.Mutable();
     }
@@ -160,8 +156,6 @@ public class Runner implements Callable<Process>, ProgressObservable {
         callLaunchModifier();
         verifyMemoryRequirement();
 
-        verifyJavaRuntime();
-
         ProcessBuilder processBuilder = new ProcessBuilder(builder.buildCommand());
         processBuilder.directory(instance.getContentDir());
         Runner.log.info("Launching: " + builder);
@@ -177,23 +171,6 @@ public class Runner implements Callable<Process>, ProgressObservable {
      */
     private void callLaunchModifier() {
         instance.modify(builder);
-    }
-
-    private void verifyJavaRuntime() {
-        JavaRuntime pickedRuntime = builder.getRuntime();
-        JavaVersion targetVersion = versionManifest.getJavaVersion();
-
-        if (pickedRuntime == null || targetVersion == null) {
-            return;
-        }
-
-        if (pickedRuntime.getMajorVersion() != targetVersion.getMajorVersion()) {
-            boolean launchAnyway = javaRuntimeMismatch.test(pickedRuntime, targetVersion);
-
-            if (!launchAnyway) {
-                throw new CancellationException("Launch cancelled by user.");
-            }
-        }
     }
 
     private void verifyMemoryRequirement() {
@@ -297,10 +274,18 @@ public class Runner implements Callable<Process>, ProgressObservable {
         builder.setMaxMemory(memory.getMaxMemory());
 
         JavaRuntime selectedRuntime = Optional.ofNullable(instance.getSettings().getRuntime())
-                .orElseGet(() -> Optional.ofNullable(versionManifest.getJavaVersion())
-                        .flatMap(JavaRuntimeFinder::findBestJavaRuntime)
-                        .orElse(null)
-                );
+                .orElseGet(() -> {
+                    String managedComponent = instance.getSettings().getManagedRuntimeComponent();
+                    if (managedComponent != null) {
+                        JavaVersion managedVersion = new JavaVersion();
+                        managedVersion.setComponent(managedComponent);
+                        return launcher.getRuntimeManager().getRuntime(managedVersion).orElse(null);
+                    }
+
+                    JavaVersion requiredVersion = JavaVersionResolver.resolve(launcher, instance, versionManifest);
+                    return launcher.getRuntimeManager().getRuntime(requiredVersion)
+                            .orElseGet(() -> JavaRuntimeFinder.findBestJavaRuntime(requiredVersion).orElse(null));
+                });
 
         // Builder defaults to the PATH `java` if the runtime is null
         builder.setRuntime(selectedRuntime);

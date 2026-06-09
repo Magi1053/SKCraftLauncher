@@ -117,8 +117,6 @@ public abstract class BaseUpdater {
                 }
             }
 
-            Collections.sort(features);
-
             SwingUtilities.invokeLater(new Runnable() {
                 @Override
                 public void run() {
@@ -307,6 +305,10 @@ public abstract class BaseUpdater {
                 installer.queue(new FileMover(tempFile.toFile(), targetFile));
             }
         }
+    }
+
+    protected void installRuntime(@NonNull Installer installer, @NonNull JavaVersion version) throws Exception {
+        launcher.getRuntimeManager().install(installer, launcher.propUrl("runtimeManifestUrl"), version);
     }
 
     private static void writeDataFile(File path, Object object) {
