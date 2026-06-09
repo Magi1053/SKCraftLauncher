@@ -9,6 +9,7 @@ package com.skcraft.launcher.creator.model.swing;
 import com.skcraft.launcher.builder.FeaturePattern;
 
 import javax.swing.table.AbstractTableModel;
+import java.util.Collections;
 import java.util.List;
 
 public class FeaturePatternTableModel extends AbstractTableModel {
@@ -92,6 +93,24 @@ public class FeaturePatternTableModel extends AbstractTableModel {
     public void removeFeature(int index) {
         features.remove(index);
         fireTableDataChanged();
+    }
+
+    public void moveFeatureUp(int index) {
+        if (index <= 0 || index >= features.size()) {
+            return;
+        }
+
+        Collections.swap(features, index, index - 1);
+        fireTableRowsUpdated(index - 1, index);
+    }
+
+    public void moveFeatureDown(int index) {
+        if (index < 0 || index >= features.size() - 1) {
+            return;
+        }
+
+        Collections.swap(features, index, index + 1);
+        fireTableRowsUpdated(index, index + 1);
     }
 
 }
