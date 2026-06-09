@@ -6,81 +6,51 @@
 
 package com.skcraft.launcher.swing;
 
-import com.skcraft.launcher.LauncherUtils;
 import lombok.extern.java.Log;
+import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
 import javax.swing.border.Border;
-import javax.swing.border.CompoundBorder;
-import javax.swing.event.HyperlinkEvent;
-import javax.swing.event.HyperlinkListener;
-import javax.swing.text.html.HTMLDocument;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Enumeration;
 import java.util.logging.Level;
-
-import static com.skcraft.launcher.LauncherUtils.checkInterrupted;
 
 @Log
 public final class WebpagePanel extends JPanel {
-    
-    private final WebpagePanel self = this;
-    
+
     private URL url;
+    private String html;
     private boolean activated;
-    private JEditorPane documentView;
-    private JScrollPane documentScroll;
-    private JProgressBar progressBar;
-    private Thread thread;
-    private Border browserBorder;
-    
-    public static WebpagePanel forURL(URL url, boolean lazy) {
-        return new WebpagePanel(url, lazy);
+    private Border browserBorder = createDefaultBrowserBorder();
+    private BrowserView browserView;
+
+    public static WebpagePanel forURL(URL url) {
+        return new WebpagePanel(url);
     }
-    
+
     public static WebpagePanel forHTML(String html) {
         return new WebpagePanel(html);
     }
 
-    private WebpagePanel(URL url, boolean lazy) {
+    private WebpagePanel(URL url) {
         this.url = url;
-        
+
         setLayout(new BorderLayout());
-        
-        if (lazy) {
-            setPlaceholder();
-        } else {
-            setDocument();
-            fetchAndDisplay(url);
-        }
+        activateBrowser();
     }
 
-    private WebpagePanel(String text) {
-        this.url = null;
-        
-        setLayout(new BorderLayout());
-        
-        setDocument();
-        setDisplay(text, null);
-    }
-    
-    public WebpagePanel(boolean lazy) {
-        this.url = null;
-        
-        setLayout(new BorderLayout());
+    private WebpagePanel(String html) {
+        this.html = html;
 
-        if (lazy) {
-            setPlaceholder();
-        } else {
-            setDocument();
-        }
+        setLayout(new BorderLayout());
+        activateBrowser();
+    }
+
+    public WebpagePanel() {
+        setLayout(new BorderLayout());
+        activateBrowser();
     }
 
     public Border getBrowserBorder() {
@@ -88,93 +58,21 @@ public final class WebpagePanel extends JPanel {
     }
 
     public void setBrowserBorder(Border browserBorder) {
-        synchronized (this) {
-            this.browserBorder = browserBorder;
-            if (documentScroll != null) {
-                documentScroll.setBorder(browserBorder);
-            }
+        this.browserBorder = browserBorder;
+
+        if (browserView != null) {
+            browserView.setBrowserBorder(browserBorder);
         }
     }
 
-    private void setDocument() {
-        activated = true;
-        
-        JLayeredPane panel = new JLayeredPane();
-        panel.setLayout(new WebpageLayoutManager());
-        
-        documentView = new JEditorPane();
-        documentView.setOpaque(false);
-        documentView.setBorder(null);
-        documentView.setEditable(false);
-        documentView.addHyperlinkListener(new HyperlinkListener() {
-            @Override
-            public void hyperlinkUpdate(HyperlinkEvent e) {
-                if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
-                    if (e.getURL() != null) {
-                        SwingHelper.openURL(e.getURL(), self);
-                    }
-                }
-            }
-        });
-
-        documentScroll = new JScrollPane(documentView);
-        documentScroll.setOpaque(false);
-        panel.add(documentScroll, new Integer(1));
-        documentScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-        synchronized (this) {
-            if (browserBorder != null) {
-                documentScroll.setBorder(browserBorder);
-            }
-        }
-        
-        progressBar = new JProgressBar();
-        progressBar.setIndeterminate(true);
-        panel.add(progressBar, new Integer(2));
-
-        SwingHelper.removeOpaqueness(this);
-        SwingHelper.removeOpaqueness(documentView);
-        SwingHelper.removeOpaqueness(documentScroll);
-        
-        add(panel, BorderLayout.CENTER);
+    private static Border createDefaultBrowserBorder() {
+        Border border = UIManager.getBorder("ScrollPane.border");
+        return border != null ? border : BorderFactory.createEtchedBorder();
     }
-    
-    private void setPlaceholder() {
-        activated = false;
-        
-        JLayeredPane panel = new JLayeredPane();
-        panel.setBorder(new CompoundBorder(
-                BorderFactory.createEtchedBorder(), BorderFactory
-                        .createEmptyBorder(4, 4, 4, 4)));
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        
-        final JButton showButton = new JButton("Load page");
-        showButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        showButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                showButton.setVisible(false);
-                setDocument();
-                fetchAndDisplay(url);
-            }
-        });
-        
-        // Center the button vertically.
-        panel.add(new Box.Filler(
-                new Dimension(0, 0),
-                new Dimension(0, 0),
-                new Dimension(1000, 1000)));
-        panel.add(showButton);
-        panel.add(new Box.Filler(
-                new Dimension(0, 0),
-                new Dimension(0, 0),
-                new Dimension(1000, 1000)));
-        
-        add(panel, BorderLayout.CENTER);
-    }
-    
+
     /**
      * Browse to a URL.
-     * 
+     *
      * @param url the URL
      * @param onlyChanged true to only browse if the last URL was different
      * @return true if only the URL was changed
@@ -183,116 +81,113 @@ public final class WebpagePanel extends JPanel {
         if (onlyChanged && this.url != null && this.url.equals(url)) {
             return false;
         }
-        
+
         this.url = url;
-        
-        if (activated) {
-            fetchAndDisplay(url);
+        this.html = null;
+
+        if (!activated) {
+            activateBrowser();
+        } else if (browserView != null) {
+            browserView.load(url);
         }
-        
+
         return true;
     }
 
-    /**
-     * Update the page. This has to be run in the Swing event thread.
-     * 
-     * @param url the URL
-     */
-    private synchronized void fetchAndDisplay(URL url) {
-        if (thread != null) {
-            thread.interrupt();
+    private void activateBrowser() {
+        if (activated) {
+            return;
         }
-        
-        progressBar.setVisible(true);
-        
-        thread = new Thread(new FetchWebpage(url));
-        thread.setDaemon(true);
-        thread.start();
+
+        activated = true;
+        removeAll();
+
+        browserView = createBrowserView();
+        browserView.setBrowserBorder(browserBorder);
+        add(browserView.getComponent(), BorderLayout.CENTER);
+        SwingHelper.removeOpaqueness(this);
+
+        revalidate();
+        repaint();
+
+        if (html != null) {
+            browserView.loadHtml(html);
+        } else if (url != null) {
+            browserView.load(url);
+        }
     }
 
-    private void setDisplay(String text, URL baseUrl) {
-        progressBar.setVisible(false);
-        documentView.setContentType("text/html");
-        HTMLDocument document = (HTMLDocument) documentView.getDocument();
-        
-        // Clear existing styles
-        Enumeration<?> e = document.getStyleNames();
-        while (e.hasMoreElements()) {
-            Object o = e.nextElement();
-            document.removeStyle((String) o);
+    private BrowserView createBrowserView() {
+        try {
+            return new JavaFxWebpageView(this);
+        } catch (LinkageError e) {
+            log.log(Level.WARNING, "JavaFX is not available; using external-browser news fallback", e);
+            return new MissingJavaFxBrowserView(this);
         }
-        
-        document.setBase(baseUrl);
-        documentView.setText(text);
-        
-        documentView.setCaretPosition(0);
     }
 
-    private void setError(String text) {
-        progressBar.setVisible(false);
-        documentView.setContentType("text/plain");
-        documentView.setText(text);
-        documentView.setCaretPosition(0);
+    interface BrowserView {
+        Component getComponent();
+
+        void setBrowserBorder(Border border);
+
+        void load(URL url);
+
+        void loadHtml(String html);
     }
-    
-    private class FetchWebpage implements Runnable {
+
+    private static final class MissingJavaFxBrowserView implements BrowserView {
+        private final Component parentComponent;
+        private final JPanel panel = new JPanel(new GridBagLayout());
         private URL url;
-        
-        public FetchWebpage(URL url) {
-            this.url = url;
+
+        private MissingJavaFxBrowserView(Component parentComponent) {
+            this.parentComponent = parentComponent;
         }
-        
+
         @Override
-        public void run() {
-            HttpURLConnection conn = null;
+        public Component getComponent() {
+            return panel;
+        }
 
-            try {
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setUseCaches(false);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Java) SKMCLauncher");
-                conn.setDoInput(true);
-                conn.setDoOutput(false);
-                conn.setReadTimeout(5000);
+        @Override
+        public void setBrowserBorder(Border border) {
+            panel.setBorder(border);
+        }
 
-                conn.connect();
+        @Override
+        public void load(URL url) {
+            this.url = url;
+            showFallback("JavaFX WebView is not available in this Java runtime.");
+        }
 
-                checkInterrupted();
+        @Override
+        public void loadHtml(String html) {
+            this.url = null;
+            showFallback("JavaFX WebView is not available in this Java runtime.");
+        }
 
-                if (conn.getResponseCode() != 200) {
-                    throw new IOException(
-                            "Did not get expected 200 code, got "
-                                    + conn.getResponseCode());
+        private void showFallback(String message) {
+            panel.removeAll();
+
+            JPanel content = new JPanel(new MigLayout("insets 12, wrap 1", "[center]", "[]unrel[]"));
+            content.add(new JLabel(message), "wrap");
+
+            JButton openButton = new JButton("Open news in browser");
+            openButton.setEnabled(url != null);
+            openButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if (url != null) {
+                        SwingHelper.openURL(url, parentComponent);
+                    }
                 }
+            });
+            content.add(openButton);
 
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(conn.getInputStream(),
-                                "UTF-8"));
-
-                StringBuilder s = new StringBuilder();
-                char[] buf = new char[1024];
-                int len = 0;
-                while ((len = reader.read(buf)) != -1) {
-                    s.append(buf, 0, len);
-                }
-                String result = s.toString();
-                
-                checkInterrupted();
-
-                setDisplay(result, LauncherUtils.concat(url, ""));
-            } catch (IOException e) {
-                if (Thread.interrupted()) {
-                    return;
-                }
-                
-                log.log(Level.WARNING, "Failed to fetch page", e);
-                setError("Failed to fetch page: " + e.getMessage());
-            } catch (InterruptedException e) {
-            } finally {
-                if (conn != null)
-                    conn.disconnect();
-                conn = null;
-            }
+            panel.add(content);
+            panel.revalidate();
+            panel.repaint();
         }
     }
 
