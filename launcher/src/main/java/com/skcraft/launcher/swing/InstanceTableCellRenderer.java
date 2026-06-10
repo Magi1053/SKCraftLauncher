@@ -36,8 +36,10 @@ public class InstanceTableCellRenderer extends JLabel implements TableCellRender
         setIcon(model.getIcon(instance));
 
         if (isSelected) {
-            setBackground(table.getSelectionBackground());
-            setForeground(table.getSelectionForeground());
+            Color activeSelectionBackground = UIManager.getColor("Table.selectionBackground");
+            Color activeSelectionForeground = UIManager.getColor("Table.selectionForeground");
+            setBackground(activeSelectionBackground != null ? activeSelectionBackground : table.getSelectionBackground());
+            setForeground(activeSelectionForeground != null ? activeSelectionForeground : table.getSelectionForeground());
         } else {
             setBackground(table.getBackground());
             setForeground(table.getForeground());

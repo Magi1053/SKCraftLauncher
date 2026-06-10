@@ -25,8 +25,6 @@ import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
-import javax.swing.event.TableModelEvent;
-import javax.swing.event.TableModelListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -60,6 +58,7 @@ public class LauncherFrame extends JFrame {
     private final JButton optionsButton = new JButton(SharedLocale.tr("launcher.options"));
     private final JButton selfUpdateButton = new JButton(SharedLocale.tr("launcher.updateLauncher"));
     private final JCheckBox updateCheck = new JCheckBox(SharedLocale.tr("launcher.downloadUpdates"));
+    private boolean initialInstanceLoad = true;
 
     /**
      * Create a new frame.
@@ -126,15 +125,6 @@ public class LauncherFrame extends JFrame {
         getRootPane().setDefaultButton(launchButton);
 
         add(container, BorderLayout.CENTER);
-
-        instancesModel.addTableModelListener(new TableModelListener() {
-            @Override
-            public void tableChanged(TableModelEvent e) {
-                if (instancesTable.getRowCount() > 0 && instancesTable.getSelectedRow() < 0) {
-                    instancesTable.setRowSelectionInterval(0, 0);
-                }
-            }
-        });
 
         instancesTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
             @Override
@@ -237,9 +227,6 @@ public class LauncherFrame extends JFrame {
 
     private void updateNewsPanel(boolean forceReload) {
         Instance instance = getSelectedInstance();
-        if (instance == null) {
-            return;
-        }
         URL newsUrl = launcher.getNewsURL(instance);
         if (!newsUrl.equals(lastLoggedNewsUrl)) {
             log.info("Loading news from " + newsUrl);
@@ -273,10 +260,6 @@ public class LauncherFrame extends JFrame {
                     }
                 }
             }
-        }
-
-        if (instancesTable.getRowCount() > 0 && instancesTable.getSelectedRow() < 0) {
-            instancesTable.setRowSelectionInterval(0, 0);
         }
     }
 
@@ -428,19 +411,24 @@ public class LauncherFrame extends JFrame {
     }
 
     private void loadInstances() {
+        String selectedNameToRestore = null;
+        Instance selected = getSelectedInstance();
+        if (selected != null) {
+            selectedNameToRestore = selected.getName();
+        } else if (initialInstanceLoad) {
+            selectedNameToRestore = launcher.getConfig().getLastInstance();
+        }
+        final String selectedName = selectedNameToRestore;
+
         ObservableFuture<InstanceList> future = launcher.getInstanceTasks().reloadInstances(this);
 
         future.addListener(new Runnable() {
             @Override
             public void run() {
-                String selectedName = null;
-                Instance selected = getSelectedInstance();
-                if (selected != null) {
-                    selectedName = selected.getName();
-                }
-
                 instancesModel.update();
+                instancesTable.clearSelection();
                 restoreInstanceSelection(selectedName);
+                initialInstanceLoad = false;
                 updateNewsPanel(true);
                 requestFocus();
             }
@@ -461,8 +449,14 @@ public class LauncherFrame extends JFrame {
     }
 
     private void launch() {
+        Instance instance = getSelectedInstance();
+        if (instance == null) {
+            SwingHelper.showErrorDialog(this, SharedLocale.tr("launcher.noInstanceError"),
+                    SharedLocale.tr("launcher.noInstanceTitle"));
+            return;
+        }
+
         boolean permitUpdate = updateCheck.isSelected();
-        Instance instance = launcher.getInstances().get(instancesTable.getSelectedRow());
 
         LaunchOptions options = new LaunchOptions.Builder()
                 .setInstance(instance)

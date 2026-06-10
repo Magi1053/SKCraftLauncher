@@ -36,6 +36,7 @@ public class Configuration {
     private String proxyUsername;
     private String proxyPassword;
     private String gameKey;
+    private String lastInstance;
     private boolean serverEnabled = false;
     private String serverHost;
     private int serverPort = 25565;

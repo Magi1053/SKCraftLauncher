@@ -69,6 +69,8 @@ public class LaunchSupervisor {
             Date now = new Date();
             instance.setLastAccessed(now);
             Persistence.commitAndForget(instance);
+            launcher.getConfig().setLastInstance(instance.getName());
+            Persistence.commitAndForget(launcher.getConfig());
 
             // Perform login
             final Session session;

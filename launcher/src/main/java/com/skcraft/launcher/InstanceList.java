@@ -151,6 +151,7 @@ public class InstanceList {
                         if (instance.getName().equalsIgnoreCase(manifest.getName())) {
                             foundLocal = true;
 
+                            instance.setName(manifest.getName());
                             instance.setTitle(manifest.getTitle());
                             instance.setPriority(manifest.getPriority());
                             URL url = concat(packagesURL, manifest.getLocation());
