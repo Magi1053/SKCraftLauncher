@@ -8,9 +8,12 @@ package com.skcraft.launcher.util;
 
 import com.google.common.collect.ImmutableList;
 import com.sun.jna.platform.win32.Advapi32Util;
+import com.sun.jna.platform.win32.Win32Exception;
+import com.sun.jna.platform.win32.WinError;
 import com.sun.jna.platform.win32.WinReg;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Windows registry helper via JNA platform
@@ -31,6 +34,21 @@ public class WinRegistry {
      */
     public static String readString(WinReg.HKEY hkey, String key, String valueName) {
         return Advapi32Util.registryGetStringValue(hkey, key, valueName);
+    }
+
+    /**
+     * Read a value from a path and value name, returning empty if the key or value does not exist.
+     */
+    public static Optional<String> readStringOptional(WinReg.HKEY hkey, String key, String valueName) {
+        try {
+            return Optional.of(readString(hkey, key, valueName));
+        } catch (Win32Exception e) {
+            if (e.getErrorCode() == WinError.ERROR_FILE_NOT_FOUND
+                    || e.getErrorCode() == WinError.ERROR_PATH_NOT_FOUND) {
+                return Optional.empty();
+            }
+            throw e;
+        }
     }
 
     /**

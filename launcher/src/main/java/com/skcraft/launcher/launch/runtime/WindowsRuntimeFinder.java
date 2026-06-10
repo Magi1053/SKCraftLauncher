@@ -17,14 +17,10 @@ public class WindowsRuntimeFinder implements PlatformRuntimeFinder {
 	public Set<File> getLauncherDirectories(Environment env) {
 		HashSet<File> launcherDirs = new HashSet<>();
 
-		try {
-			String launcherPath = WinRegistry.readString(WinReg.HKEY_CURRENT_USER,
-					"SOFTWARE\\Mojang\\InstalledProducts\\Minecraft Launcher", "InstallLocation");
-
-			launcherDirs.add(new File(launcherPath));
-		} catch (Throwable err) {
-			log.log(Level.WARNING, "Failed to read launcher location from registry", err);
-		}
+		WinRegistry.readStringOptional(WinReg.HKEY_CURRENT_USER,
+				"SOFTWARE\\Mojang\\InstalledProducts\\Minecraft Launcher", "InstallLocation")
+				.map(File::new)
+				.ifPresent(launcherDirs::add);
 
 		String programFiles = Objects.equals(env.getArchBits(), "64")
 				? System.getenv("ProgramFiles(x86)")
