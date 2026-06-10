@@ -233,6 +233,7 @@ public class InstanceSettingsDialog extends JDialog {
 		buttonsPanel.addGlue();
 		buttonsPanel.addElement(okButton);
 		buttonsPanel.addElement(cancelButton);
+		SwingHelper.alignButtonSizes(okButton, cancelButton);
 
 		okButton.addActionListener(e -> {
 			save();

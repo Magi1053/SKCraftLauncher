@@ -22,6 +22,7 @@ import lombok.extern.java.Log;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.TableModelEvent;
@@ -29,6 +30,7 @@ import javax.swing.event.TableModelListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -52,7 +54,6 @@ public class LauncherFrame extends JFrame {
     @Getter
     private final JScrollPane instanceScroll = new JScrollPane(instancesTable);
     private WebpagePanel webView;
-    private JSplitPane splitPane;
     private URL lastLoggedNewsUrl;
     private final JButton launchButton = new JButton(SharedLocale.tr("launcher.launch"));
     private final JButton refreshButton = new JButton(SharedLocale.tr("launcher.checkForUpdates"));
@@ -92,7 +93,13 @@ public class LauncherFrame extends JFrame {
         container.setLayout(new MigLayout("fill, insets dialog", "[][]push[][]", "[grow][]"));
 
         webView = createNewsPanel();
-        splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, instanceScroll, webView);
+        Border staticPanelBorder = createStaticPanelBorder();
+        instanceScroll.setBorder(staticPanelBorder);
+        webView.setBrowserBorder(staticPanelBorder);
+        webView.setDarkTheme(LauncherLookAndFeel.isDarkTheme(launcher.getConfig().getThemeMode()));
+        JPanel contentPanel = new JPanel(new MigLayout("ins 0, fill", "[200!][grow, fill]", "[grow, fill]"));
+        contentPanel.add(instanceScroll, "grow");
+        contentPanel.add(webView, "grow");
         selfUpdateButton.setVisible(launcher.getUpdateManager().getPendingUpdate());
 
         launcher.getUpdateManager().addPropertyChangeListener(new PropertyChangeListener() {
@@ -108,16 +115,15 @@ public class LauncherFrame extends JFrame {
         updateCheck.setSelected(true);
         instancesTable.setModel(instancesModel);
         launchButton.setFont(launchButton.getFont().deriveFont(Font.BOLD));
-        splitPane.setDividerLocation(200);
-        splitPane.setDividerSize(4);
-        splitPane.setOpaque(false);
-        container.add(splitPane, "grow, wrap, span 5, gapbottom unrel, w null:680, h null:350");
-        SwingHelper.flattenJSplitPane(splitPane);
+        launchButton.putClientProperty("FlatLaf.styleClass", "primary");
+        bindEnterToLaunch();
+        container.add(contentPanel, "grow, wrap, span 5, gapbottom unrel, w null:680, h null:350");
         container.add(refreshButton);
         container.add(updateCheck);
         container.add(selfUpdateButton);
         container.add(optionsButton);
         container.add(launchButton);
+        getRootPane().setDefaultButton(launchButton);
 
         add(container, BorderLayout.CENTER);
 
@@ -195,6 +201,34 @@ public class LauncherFrame extends JFrame {
      */
     protected WebpagePanel createNewsPanel() {
         return new WebpagePanel();
+    }
+
+    private static Border createStaticPanelBorder() {
+        Color borderColor = UIManager.getColor("Component.borderColor");
+        if (borderColor == null) {
+            borderColor = UIManager.getColor("Separator.foreground");
+        }
+        if (borderColor == null) {
+            borderColor = Color.GRAY;
+        }
+        return BorderFactory.createLineBorder(borderColor);
+    }
+
+    private void bindEnterToLaunch() {
+        final String launchActionKey = "launchSelectedInstance";
+        Action launchAction = new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (launchButton.isEnabled()) {
+                    launchButton.doClick();
+                }
+            }
+        };
+
+        instancesTable.getActionMap().put(launchActionKey, launchAction);
+        KeyStroke enter = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0);
+        instancesTable.getInputMap(JComponent.WHEN_FOCUSED).put(enter, launchActionKey);
+        instancesTable.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(enter, launchActionKey);
     }
 
     private void updateNewsPanel() {
@@ -420,6 +454,7 @@ public class LauncherFrame extends JFrame {
     private void showOptions() {
         ConfigurationDialog configDialog = new ConfigurationDialog(this, launcher);
         configDialog.setVisible(true);
+        webView.setDarkTheme(LauncherLookAndFeel.isDarkTheme(launcher.getConfig().getThemeMode()));
         if (configDialog.isGameKeyChanged()) {
             loadInstances();
         }

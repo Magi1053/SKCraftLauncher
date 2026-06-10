@@ -111,12 +111,13 @@ public class ProcessConsoleFrame extends ConsoleFrame {
 
     protected void initComponents() {
         killButton = new JButton(SharedLocale.tr("console.forceClose"));
-        minimizeButton = new JButton(); // Text set later
+        minimizeButton = new JButton(SharedLocale.tr("console.closeWindow"));
 
         LinedBoxPanel buttonsPanel = getButtonsPanel();
         buttonsPanel.addGlue();
         buttonsPanel.addElement(killButton);
         buttonsPanel.addElement(minimizeButton);
+        alignActionButtons();
         
         killButton.addActionListener(new ActionListener() {
             @Override
@@ -187,6 +188,10 @@ public class ProcessConsoleFrame extends ConsoleFrame {
         return false;
     }
 
+    private void alignActionButtons() {
+        SwingHelper.alignButtonSizes(killButton, minimizeButton);
+    }
+
     private synchronized void updateComponents() {
         Image icon = hasProcess() ? getTrayRunningIcon() : getTrayClosedIcon();
 
@@ -197,6 +202,7 @@ public class ProcessConsoleFrame extends ConsoleFrame {
         } else {
             minimizeButton.setText(SharedLocale.tr("console.hideWindow"));
         }
+        alignActionButtons();
 
         if (trayIcon != null) {
             trayIcon.setImage(icon);

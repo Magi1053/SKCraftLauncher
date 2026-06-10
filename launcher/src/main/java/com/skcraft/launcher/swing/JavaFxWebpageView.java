@@ -37,6 +37,7 @@ final class JavaFxWebpageView extends JPanel implements WebpagePanel.BrowserView
     private WebEngine webEngine;
     private URL url;
     private String html;
+    private boolean darkTheme;
     private Border browserBorder;
 
     JavaFxWebpageView(Component parentComponent) {
@@ -78,11 +79,22 @@ final class JavaFxWebpageView extends JPanel implements WebpagePanel.BrowserView
     }
 
     @Override
+    public void setDarkTheme(boolean darkTheme) {
+        this.darkTheme = darkTheme;
+        runOnFxThread(new Runnable() {
+            @Override
+            public void run() {
+                applyPreferredColorScheme();
+            }
+        });
+    }
+
+    @Override
     public void load(URL url) {
         this.url = url;
         this.html = null;
 
-        Platform.runLater(new Runnable() {
+        runOnFxThread(new Runnable() {
             @Override
             public void run() {
                 loadPendingContent();
@@ -95,7 +107,7 @@ final class JavaFxWebpageView extends JPanel implements WebpagePanel.BrowserView
         this.url = null;
         this.html = html;
 
-        Platform.runLater(new Runnable() {
+        runOnFxThread(new Runnable() {
             @Override
             public void run() {
                 loadPendingContent();
@@ -105,7 +117,6 @@ final class JavaFxWebpageView extends JPanel implements WebpagePanel.BrowserView
 
     private void initWebView() {
         final WebView webView = new WebView();
-        webView.setContextMenuEnabled(false);
         webEngine = webView.getEngine();
         webEngine.setJavaScriptEnabled(true);
         URL stylesheet = JavaFxWebpageView.class.getResource("webview.css");
@@ -166,7 +177,62 @@ final class JavaFxWebpageView extends JPanel implements WebpagePanel.BrowserView
             showError(message);
         } else if (state == Worker.State.SUCCEEDED) {
             hideError();
+            applyPreferredColorScheme();
         }
+    }
+
+    private void applyPreferredColorScheme() {
+        if (webEngine == null) {
+            return;
+        }
+
+        String preferredScheme = darkTheme ? "dark" : "light";
+        String script = """
+                (() => {
+                  const preferred = '%s';
+                  const noop = () => {};
+                  const createMql = (media, matches) => ({
+                    media,
+                    matches,
+                    onchange: null,
+                    addListener: noop,
+                    removeListener: noop,
+                    addEventListener: noop,
+                    removeEventListener: noop,
+                    dispatchEvent: () => false
+                  });
+
+                  const originalMatchMedia = window.__launcherOriginalMatchMedia
+                    || (typeof window.matchMedia === 'function' ? window.matchMedia.bind(window) : null);
+                  window.__launcherOriginalMatchMedia = originalMatchMedia;
+
+                  window.matchMedia = (query) => {
+                    const media = String(query == null ? '' : query);
+                    if (media.includes('prefers-color-scheme')) {
+                      const matchesDark = media.includes('dark') && preferred === 'dark';
+                      const matchesLight = media.includes('light') && preferred === 'light';
+                      return createMql(media, matchesDark || matchesLight);
+                    }
+
+                    return originalMatchMedia ? originalMatchMedia(media) : createMql(media, false);
+                  };
+
+                  const root = document && document.documentElement;
+                  if (root) {
+                    root.setAttribute('data-prefers-color-scheme', preferred);
+                    root.style.colorScheme = preferred;
+                  }
+                })();
+                """.formatted(preferredScheme);
+
+        try {
+            webEngine.executeScript(script);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private static void runOnFxThread(Runnable action) {
+        Platform.runLater(action);
     }
 
     private void setProgressVisible(final boolean visible) {

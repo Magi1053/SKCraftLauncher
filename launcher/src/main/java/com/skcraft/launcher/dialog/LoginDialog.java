@@ -94,6 +94,7 @@ public class LoginDialog extends JDialog {
         buttonsPanel.addGlue();
         buttonsPanel.addElement(loginButton);
         buttonsPanel.addElement(cancelButton);
+        SwingHelper.alignButtonSizes(loginButton, cancelButton);
 
         add(formPanel, BorderLayout.CENTER);
         add(buttonsPanel, BorderLayout.SOUTH);

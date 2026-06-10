@@ -17,6 +17,7 @@ import com.skcraft.launcher.launch.LaunchSupervisor;
 import com.skcraft.launcher.model.minecraft.Library;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
 import com.skcraft.launcher.persistence.Persistence;
+import com.skcraft.launcher.swing.LauncherLookAndFeel;
 import com.skcraft.launcher.swing.SwingHelper;
 import com.skcraft.launcher.update.UpdateManager;
 import com.skcraft.launcher.update.runtime.JavaRuntimeManager;
@@ -447,7 +448,7 @@ public final class Launcher {
                 try {
                     Launcher launcher = createFromArguments(args);
                     SwingHelper.setSwingProperties(tr("launcher.appTitle", launcher.getVersion()));
-                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                    LauncherLookAndFeel.install(launcher.getConfig().getThemeMode());
                     launcher.showLauncherWindow();
                 } catch (Throwable t) {
                     log.log(Level.WARNING, "Load failure", t);

@@ -21,9 +21,15 @@ import lombok.Data;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Configuration {
 
+    public static final String THEME_LIGHT = "light";
+    public static final String THEME_DARK = "dark";
+    public static final String THEME_SYSTEM = "system";
+
     private boolean offlineEnabled = false;
     private int windowWidth = 854;
     private int windowHeight = 480;
+    private boolean darkTheme = false;
+    private String themeMode;
     private boolean proxyEnabled = false;
     private String proxyHost = "localhost";
     private int proxyPort = 8080;
@@ -56,5 +62,25 @@ public class Configuration {
      */
     public void setJvmPath(String jvmPath) {
         // Global Java runtime settings are no longer used.
+    }
+
+    public String getThemeMode() {
+        if (themeMode == null || themeMode.trim().isEmpty()) {
+            return darkTheme ? THEME_DARK : THEME_LIGHT;
+        }
+
+        String normalized = themeMode.trim().toLowerCase();
+        if (THEME_DARK.equals(normalized)) {
+            return THEME_DARK;
+        }
+        if (THEME_SYSTEM.equals(normalized)) {
+            return THEME_SYSTEM;
+        }
+        return THEME_LIGHT;
+    }
+
+    public void setThemeMode(String themeMode) {
+        this.themeMode = themeMode;
+        this.darkTheme = THEME_DARK.equals(getThemeMode());
     }
 }

@@ -23,6 +23,7 @@ public final class WebpagePanel extends JPanel {
     private URL url;
     private String html;
     private boolean activated;
+    private boolean darkTheme;
     private Border browserBorder = createDefaultBrowserBorder();
     private BrowserView browserView;
 
@@ -65,6 +66,14 @@ public final class WebpagePanel extends JPanel {
         }
     }
 
+    public void setDarkTheme(boolean darkTheme) {
+        this.darkTheme = darkTheme;
+
+        if (browserView != null) {
+            browserView.setDarkTheme(darkTheme);
+        }
+    }
+
     private static Border createDefaultBrowserBorder() {
         Border border = UIManager.getBorder("ScrollPane.border");
         return border != null ? border : BorderFactory.createEtchedBorder();
@@ -104,6 +113,7 @@ public final class WebpagePanel extends JPanel {
 
         browserView = createBrowserView();
         browserView.setBrowserBorder(browserBorder);
+        browserView.setDarkTheme(darkTheme);
         add(browserView.getComponent(), BorderLayout.CENTER);
         SwingHelper.removeOpaqueness(this);
 
@@ -131,6 +141,8 @@ public final class WebpagePanel extends JPanel {
 
         void setBrowserBorder(Border border);
 
+        void setDarkTheme(boolean darkTheme);
+
         void load(URL url);
 
         void loadHtml(String html);
@@ -153,6 +165,10 @@ public final class WebpagePanel extends JPanel {
         @Override
         public void setBrowserBorder(Border border) {
             panel.setBorder(border);
+        }
+
+        @Override
+        public void setDarkTheme(boolean darkTheme) {
         }
 
         @Override

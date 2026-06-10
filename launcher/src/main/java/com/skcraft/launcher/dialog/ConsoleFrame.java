@@ -87,6 +87,7 @@ public class ConsoleFrame extends JFrame {
         buttonsPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         buttonsPanel.addElement(pastebinButton);
         buttonsPanel.addElement(clearLogButton);
+        SwingHelper.alignButtonSizes(pastebinButton, clearLogButton);
 
         add(buttonsPanel, BorderLayout.NORTH);
         add(messageLog, BorderLayout.CENTER);

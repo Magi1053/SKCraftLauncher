@@ -35,6 +35,7 @@ public class ConfigurationDialog extends JDialog {
     private final JPanel tabContainer = new JPanel(new BorderLayout());
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final JPanel instanceSettingsPanel = new JPanel(new MigLayout("fillx, wrap 1, ins 12", "[grow]", ""));
+    private final JScrollPane instanceSettingsScroll = new JScrollPane(instanceSettingsPanel);
     private final FormPanel gameSettingsPanel = new FormPanel();
     private final JSpinner widthSpinner = new JSpinner();
     private final JSpinner heightSpinner = new JSpinner();
@@ -45,6 +46,11 @@ public class ConfigurationDialog extends JDialog {
     private final JTextField proxyUsernameText = new JTextField();
     private final JPasswordField proxyPasswordText = new JPasswordField();
     private final FormPanel advancedPanel = new FormPanel();
+    private final JComboBox<String> themeSelect = new JComboBox<>(new String[] {
+            SharedLocale.tr("options.themeLight"),
+            SharedLocale.tr("options.themeDark"),
+            SharedLocale.tr("options.themeSystem")
+    });
     private final JTextField gameKeyText = new JTextField();
     private final LinedBoxPanel buttonsPanel = new LinedBoxPanel(true);
     private final JButton okButton = new JButton(SharedLocale.tr("button.ok"));
@@ -83,16 +89,19 @@ public class ConfigurationDialog extends JDialog {
         mapper.map(gameKeyText, "gameKey");
 
         mapper.copyFromObject();
+        themeSelect.setSelectedIndex(indexForThemeMode(config.getThemeMode()));
     }
 
     private void initComponents() {
         buildInstanceSettingsPanel();
-        SwingHelper.removeOpaqueness(instanceSettingsPanel);
-        tabbedPane.addTab(SharedLocale.tr("options.instancesTab"), new JScrollPane(instanceSettingsPanel));
+        instanceSettingsScroll.setBorder(BorderFactory.createEmptyBorder());
+        instanceSettingsScroll.setViewportBorder(BorderFactory.createEmptyBorder());
+        instanceSettingsScroll.setOpaque(false);
+        instanceSettingsScroll.getViewport().setOpaque(false);
+        tabbedPane.addTab(SharedLocale.tr("options.instancesTab"), instanceSettingsScroll);
 
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowWidth")), widthSpinner);
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowHeight")), heightSpinner);
-        SwingHelper.removeOpaqueness(gameSettingsPanel);
         tabbedPane.addTab(SharedLocale.tr("options.minecraftTab"), SwingHelper.alignTabbedPane(gameSettingsPanel));
 
         proxySettingsPanel.addRow(useProxyCheck);
@@ -100,11 +109,10 @@ public class ConfigurationDialog extends JDialog {
         proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyPort")), proxyPortText);
         proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyUsername")), proxyUsernameText);
         proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyPassword")), proxyPasswordText);
-        SwingHelper.removeOpaqueness(proxySettingsPanel);
         tabbedPane.addTab(SharedLocale.tr("options.proxyTab"), SwingHelper.alignTabbedPane(proxySettingsPanel));
 
+        advancedPanel.addRow(new JLabel(SharedLocale.tr("options.theme")), themeSelect);
         advancedPanel.addRow(new JLabel(SharedLocale.tr("options.gameKey")), gameKeyText);
-        SwingHelper.removeOpaqueness(advancedPanel);
         tabbedPane.addTab(SharedLocale.tr("options.advancedTab"), SwingHelper.alignTabbedPane(advancedPanel));
 
         buttonsPanel.addElement(logButton);
@@ -119,6 +127,10 @@ public class ConfigurationDialog extends JDialog {
         add(buttonsPanel, BorderLayout.SOUTH);
 
         SwingHelper.equalWidth(okButton, cancelButton);
+        SwingHelper.styleDialogButton(logButton);
+        SwingHelper.styleDialogButton(aboutButton);
+        SwingHelper.styleDialogButton(okButton);
+        SwingHelper.styleDialogButton(cancelButton);
 
         cancelButton.addActionListener(ActionListeners.dispose(this));
 
@@ -221,10 +233,32 @@ public class ConfigurationDialog extends JDialog {
      */
     public void save() {
         mapper.copyFromSwing();
+        config.setThemeMode(themeModeForIndex(themeSelect.getSelectedIndex()));
         gameKeyChanged = !originalGameKey.equals(Strings.nullToEmpty(config.getGameKey()));
 
         Persistence.commitAndForget(config);
+        LauncherLookAndFeel.applyTheme(config.getThemeMode());
         dispose();
+    }
+
+    private static int indexForThemeMode(String themeMode) {
+        if (Configuration.THEME_DARK.equals(themeMode)) {
+            return 1;
+        }
+        if (Configuration.THEME_SYSTEM.equals(themeMode)) {
+            return 2;
+        }
+        return 0;
+    }
+
+    private static String themeModeForIndex(int index) {
+        if (index == 1) {
+            return Configuration.THEME_DARK;
+        }
+        if (index == 2) {
+            return Configuration.THEME_SYSTEM;
+        }
+        return Configuration.THEME_LIGHT;
     }
 
     /**

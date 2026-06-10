@@ -14,9 +14,8 @@ import java.awt.event.MouseEvent;
 
 public class LinkButton extends JButton {
 
-    private static final Color LINK_COLOR = Color.blue;
-    private static final Border LINK_BORDER = BorderFactory.createEmptyBorder(0, 0, 1, 0); 
-    private static final Border HOVER_BORDER = BorderFactory.createMatteBorder(0, 0, 1, 0, LINK_COLOR);
+    private static final Color FALLBACK_LINK_COLOR = Color.blue;
+    private static final Border LINK_BORDER = BorderFactory.createEmptyBorder(0, 0, 1, 0);
     
     public LinkButton() {
         super();
@@ -44,16 +43,16 @@ public class LinkButton extends JButton {
     }
     
     public void setupLink() {
-        setBorder(LINK_BORDER); 
-        setForeground(LINK_COLOR); 
-        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); 
-        setFocusPainted(false); 
-        setRequestFocusEnabled(false); 
+        setBorder(LINK_BORDER);
+        setForeground(getLinkColor());
+        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        setFocusPainted(false);
+        setRequestFocusEnabled(false);
         setContentAreaFilled(false);
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                ((JComponent) e.getComponent()).setBorder(HOVER_BORDER);
+                ((JComponent) e.getComponent()).setBorder(createHoverBorder());
             }
 
             @Override
@@ -66,6 +65,15 @@ public class LinkButton extends JButton {
                 ((JComponent) e.getComponent()).setBorder(LINK_BORDER);
             }
         });
+    }
+
+    private static Border createHoverBorder() {
+        return BorderFactory.createMatteBorder(0, 0, 1, 0, getLinkColor());
+    }
+
+    private static Color getLinkColor() {
+        Color linkColor = UIManager.getColor("Component.linkColor");
+        return linkColor != null ? linkColor : FALLBACK_LINK_COLOR;
     }
 
 }

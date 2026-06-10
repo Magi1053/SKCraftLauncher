@@ -21,9 +21,6 @@ import lombok.extern.java.Log;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.border.Border;
-import javax.swing.plaf.basic.BasicSplitPaneDivider;
-import javax.swing.plaf.basic.BasicSplitPaneUI;
 import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
@@ -378,18 +375,7 @@ public final class SwingHelper {
     }
 
     public static void flattenJSplitPane(JSplitPane splitPane) {
-        splitPane.setBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1));
-        BasicSplitPaneUI flatDividerSplitPaneUI = new BasicSplitPaneUI() {
-            @Override
-            public BasicSplitPaneDivider createDefaultDivider() {
-                return new BasicSplitPaneDivider(this) {
-                    @Override
-                    public void setBorder(Border b) {
-                    }
-                };
-            }
-        };
-        splitPane.setUI(flatDividerSplitPaneUI);
+        splitPane.setContinuousLayout(true);
         splitPane.setBorder(null);
     }
 
@@ -426,7 +412,6 @@ public final class SwingHelper {
         container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
         container.add(component);
         container.add(new Box.Filler(new Dimension(0, 0), new Dimension(0, 10000), new Dimension(0, 10000)));
-        SwingHelper.removeOpaqueness(container);
         return container;
     }
 
