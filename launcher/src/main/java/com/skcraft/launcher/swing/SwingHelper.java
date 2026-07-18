@@ -61,6 +61,18 @@ public final class SwingHelper {
     private SwingHelper() {
     }
 
+    private static Font getDetailsTextFont() {
+        Font baseFont = UIManager.getFont("TextArea.font");
+        if (baseFont == null) {
+            baseFont = UIManager.getFont("Label.font");
+        }
+        if (baseFont == null) {
+            return new Font(Font.MONOSPACED, Font.PLAIN, 12);
+        }
+        return new Font(Font.MONOSPACED, Font.PLAIN, baseFont.getSize())
+                .deriveFont(Math.max(11f, baseFont.getSize2D() - 1f));
+    }
+
     public static String htmlEscape(String str) {
         return str.replace(">", "&gt;")
                 .replace("<", "&lt;")
@@ -202,7 +214,7 @@ public final class SwingHelper {
             if (detailsText != null) {
                 JTextArea textArea = new JTextArea(SharedLocale.tr("errors.reportErrorPreface") + detailsText);
                 JLabel tempLabel = new JLabel();
-                textArea.setFont(tempLabel.getFont());
+                textArea.setFont(getDetailsTextFont());
                 textArea.setBackground(tempLabel.getBackground());
                 textArea.setTabSize(2);
                 textArea.setEditable(false);
@@ -467,6 +479,21 @@ public final class SwingHelper {
     public static Color uiColor(String key, Color fallback) {
         Color color = UIManager.getColor(key);
         return color != null ? color : fallback;
+    }
+
+    /**
+     * Background color used by list/table panes such as the instances panel.
+     */
+    public static Color tableBackground() {
+        return uiColor("Table.background", Color.WHITE);
+    }
+
+    public static void applyTableBackground(JComponent... components) {
+        Color background = tableBackground();
+        for (JComponent component : components) {
+            component.setBackground(background);
+            component.setOpaque(true);
+        }
     }
 
     public static void styleDialogButton(JButton button) {

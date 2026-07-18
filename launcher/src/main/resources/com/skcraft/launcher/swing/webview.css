@@ -1,8 +1,0 @@
-html {
-    scrollbar-gutter: stable !important;
-}
-
-body {
-    border-right: 18px solid transparent !important;
-    box-sizing: border-box !important;
-}

@@ -16,10 +16,10 @@ dependencies {
     implementation 'com.jidesoft:jide-oss:3.6.18'
 }
 
+
 processResources {
+    def projectVersion = project.version.toString()
     filesMatching('**/*.properties') {
-        filter {
-            it.replace('${project.version}', project.version)
-        }
+        filter { it.replace('${project.version}', projectVersion) }
     }
 }

@@ -4,19 +4,23 @@
  * Please see LICENSE.txt for license information.
  */
 
-package com.skcraft.launcher.swing;
+package com.skcraft.launcher.browser;
 
+import com.formdev.flatlaf.FlatLaf;
+import com.skcraft.launcher.browser.mac.MacWkWebpageView;
+import com.skcraft.launcher.browser.swt.SwtWebpageView;
+import com.skcraft.launcher.swing.SwingHelper;
 import lombok.extern.java.Log;
-import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
 import javax.swing.border.Border;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.net.URL;
 import java.util.logging.Level;
 
+/**
+ * Swing facade for the platform-selected embedded browser.
+ */
 @Log
 public final class WebpagePanel extends JPanel {
 
@@ -25,6 +29,7 @@ public final class WebpagePanel extends JPanel {
     private boolean activated;
     private boolean darkTheme;
     private Border browserBorder = createDefaultBrowserBorder();
+    private final boolean forceMissingBrowser;
     private BrowserView browserView;
 
     public static WebpagePanel forURL(URL url) {
@@ -35,23 +40,41 @@ public final class WebpagePanel extends JPanel {
         return new WebpagePanel(html);
     }
 
-    private WebpagePanel(URL url) {
-        this.url = url;
+    public static WebpagePanel missingBrowser() {
+        return new WebpagePanel(true);
+    }
 
-        setLayout(new BorderLayout());
-        activateBrowser();
+    private WebpagePanel(URL url) {
+        this.forceMissingBrowser = false;
+        this.url = url;
+        initialize();
     }
 
     private WebpagePanel(String html) {
+        this.forceMissingBrowser = false;
         this.html = html;
+        initialize();
+    }
 
+    public WebpagePanel() {
+        this.forceMissingBrowser = false;
+        initialize();
+    }
+
+    private WebpagePanel(boolean forceMissingBrowser) {
+        this.forceMissingBrowser = forceMissingBrowser;
+        initialize();
+    }
+
+    private void initialize() {
         setLayout(new BorderLayout());
         activateBrowser();
     }
 
-    public WebpagePanel() {
-        setLayout(new BorderLayout());
-        activateBrowser();
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        setDarkTheme(FlatLaf.isLafDark());
     }
 
     public Border getBrowserBorder() {
@@ -60,7 +83,6 @@ public final class WebpagePanel extends JPanel {
 
     public void setBrowserBorder(Border browserBorder) {
         this.browserBorder = browserBorder;
-
         if (browserView != null) {
             browserView.setBrowserBorder(browserBorder);
         }
@@ -68,9 +90,14 @@ public final class WebpagePanel extends JPanel {
 
     public void setDarkTheme(boolean darkTheme) {
         this.darkTheme = darkTheme;
-
         if (browserView != null) {
             browserView.setDarkTheme(darkTheme);
+        }
+    }
+
+    public void disposeBrowser() {
+        if (browserView != null) {
+            browserView.disposeBrowser();
         }
     }
 
@@ -82,9 +109,9 @@ public final class WebpagePanel extends JPanel {
     /**
      * Browse to a URL.
      *
-     * @param url the URL
+     * @param url         the URL
      * @param onlyChanged true to only browse if the last URL was different
-     * @return true if only the URL was changed
+     * @return true if the URL changed
      */
     public boolean browse(URL url, boolean onlyChanged) {
         if (onlyChanged && this.url != null && this.url.equals(url)) {
@@ -110,12 +137,11 @@ public final class WebpagePanel extends JPanel {
 
         activated = true;
         removeAll();
-
-        browserView = createBrowserView();
-        browserView.setBrowserBorder(browserBorder);
-        browserView.setDarkTheme(darkTheme);
+        browserView = BrowserViewFactory.create(this, forceMissingBrowser);
         add(browserView.getComponent(), BorderLayout.CENTER);
         SwingHelper.removeOpaqueness(this);
+        browserView.setBrowserBorder(browserBorder);
+        browserView.setDarkTheme(darkTheme);
 
         revalidate();
         repaint();
@@ -127,33 +153,42 @@ public final class WebpagePanel extends JPanel {
         }
     }
 
-    private BrowserView createBrowserView() {
-        try {
-            return new JavaFxWebpageView(this);
-        } catch (LinkageError e) {
-            log.log(Level.WARNING, "JavaFX is not available; using external-browser news fallback", e);
-            return new MissingJavaFxBrowserView(this);
+    private static final class BrowserViewFactory {
+
+        private BrowserViewFactory() {
+        }
+
+        private static BrowserView create(Component parentComponent, boolean forceMissingBrowser) {
+            if (forceMissingBrowser) {
+                return new MissingBrowserView(parentComponent);
+            }
+
+            try {
+                switch (BrowserRuntime.detectBackend()) {
+                    case WKWEBVIEW:
+                        return new MacWkWebpageView(parentComponent);
+                    case SWT:
+                        return new SwtWebpageView(parentComponent);
+                    default:
+                        throw new IllegalStateException(
+                                "Unsupported browser backend: " + BrowserRuntime.detectBackend());
+                }
+            } catch (LinkageError e) {
+                log.log(Level.WARNING, "Embedded browser is unavailable; news panel disabled", e);
+                return new MissingBrowserView(parentComponent);
+            } catch (RuntimeException e) {
+                log.log(Level.WARNING, "Embedded browser failed to initialize; news panel disabled", e);
+                return new MissingBrowserView(parentComponent);
+            }
         }
     }
 
-    interface BrowserView {
-        Component getComponent();
+    private static final class MissingBrowserView implements BrowserView {
 
-        void setBrowserBorder(Border border);
-
-        void setDarkTheme(boolean darkTheme);
-
-        void load(URL url);
-
-        void loadHtml(String html);
-    }
-
-    private static final class MissingJavaFxBrowserView implements BrowserView {
         private final Component parentComponent;
         private final JPanel panel = new JPanel(new GridBagLayout());
-        private URL url;
 
-        private MissingJavaFxBrowserView(Component parentComponent) {
+        private MissingBrowserView(Component parentComponent) {
             this.parentComponent = parentComponent;
         }
 
@@ -169,42 +204,31 @@ public final class WebpagePanel extends JPanel {
 
         @Override
         public void setDarkTheme(boolean darkTheme) {
+            SwingHelper.applyTableBackground(panel);
         }
 
         @Override
         public void load(URL url) {
-            this.url = url;
-            showFallback("JavaFX WebView is not available in this Java runtime.");
+            showFallback();
         }
 
         @Override
         public void loadHtml(String html) {
-            this.url = null;
-            showFallback("JavaFX WebView is not available in this Java runtime.");
+            showFallback();
         }
 
-        private void showFallback(String message) {
+        @Override
+        public void disposeBrowser() {
+        }
+
+        private void showFallback() {
             panel.removeAll();
-
-            JPanel content = new JPanel(new MigLayout("insets 12, wrap 1", "[center]", "[]unrel[]"));
-            content.add(new JLabel(message), "wrap");
-
-            JButton openButton = new JButton("Open news in browser");
-            openButton.setEnabled(url != null);
-            openButton.addActionListener(new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    if (url != null) {
-                        SwingHelper.openURL(url, parentComponent);
-                    }
-                }
-            });
-            content.add(openButton);
-
+            JPanel content = BrowserFallbackPanels.buildUnavailablePanel(parentComponent);
+            SwingHelper.applyTableBackground(content);
             panel.add(content);
+            SwingHelper.applyTableBackground(panel);
             panel.revalidate();
             panel.repaint();
         }
     }
-
 }

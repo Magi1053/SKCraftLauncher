@@ -13,6 +13,7 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.skcraft.launcher.auth.*;
+import com.skcraft.launcher.browser.BrowserBootstrap;
 import com.skcraft.launcher.launch.LaunchSupervisor;
 import com.skcraft.launcher.model.minecraft.Library;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
@@ -401,6 +402,27 @@ public final class Launcher {
     }
 
     /**
+     * Resolve the launcher base directory from command line arguments.
+     *
+     * @param args the arguments
+     * @return the base directory
+     * @throws ParameterException thrown on a bad parameter
+     */
+    public static File resolveBaseDirFromArguments(String[] args) throws ParameterException {
+        LauncherArguments options = new LauncherArguments();
+        new JCommander(options).parse(args);
+        return resolveBaseDirFromArguments(options);
+    }
+
+    private static File resolveBaseDirFromArguments(LauncherArguments options) {
+        File dir = options.getDir();
+        if (dir != null) {
+            return dir.getAbsoluteFile();
+        }
+        return new File("").getAbsoluteFile();
+    }
+
+    /**
      * Create a new launcher from arguments.
      *
      * @param args the arguments
@@ -415,12 +437,10 @@ public final class Launcher {
         Integer bsVersion = options.getBootstrapVersion();
         log.info(bsVersion != null ? "Bootstrap version " + bsVersion + " detected" : "Not bootstrapped");
 
-        File dir = options.getDir();
-        if (dir != null) {
-            dir = dir.getAbsoluteFile();
+        File dir = resolveBaseDirFromArguments(options);
+        if (options.getDir() != null) {
             log.info("Using given base directory " + dir.getAbsolutePath());
         } else {
-            dir = new File("").getAbsoluteFile();
             log.info("Using current directory " + dir.getAbsolutePath());
         }
 
@@ -441,6 +461,10 @@ public final class Launcher {
      */
     public static void main(final String[] args) {
         setupLogger();
+        if (BrowserBootstrap.prepare(args)) {
+            return;
+        }
+        BrowserBootstrap.configureSwing();
 
         SwingUtilities.invokeLater(new Runnable() {
             @Override
@@ -457,7 +481,6 @@ public final class Launcher {
                 }
             }
         });
-
     }
 
 }

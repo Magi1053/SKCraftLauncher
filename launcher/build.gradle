@@ -9,6 +9,10 @@ application {
     mainClass = "com.skcraft.launcher.Launcher"
 }
 
+apply from: rootProject.file('gradle/browser-runtime.gradle')
+
+configureLauncherBrowser()
+
 dependencies {
     api 'javax.xml.bind:jaxb-api:2.3.1'
     api 'com.fasterxml.jackson.core:jackson-databind:2.13.2.2'
@@ -23,19 +27,19 @@ dependencies {
     implementation 'net.java.dev.jna:jna-platform:5.11.0'
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'com.formdev:flatlaf:3.7.1'
+}
 
-    implementation "org.openjfx:javafx-base:${openJfxVersion}:${openJfxPlatform}"
-    implementation "org.openjfx:javafx-graphics:${openJfxVersion}:${openJfxPlatform}"
-    implementation "org.openjfx:javafx-controls:${openJfxVersion}:${openJfxPlatform}"
-    implementation "org.openjfx:javafx-media:${openJfxVersion}:${openJfxPlatform}"
-    implementation "org.openjfx:javafx-swing:${openJfxVersion}:${openJfxPlatform}"
-    implementation "org.openjfx:javafx-web:${openJfxVersion}:${openJfxPlatform}"
+shadowJar {
+    minimize {
+        exclude(dependency('com.formdev:flatlaf:.*'))
+        exclude(dependency('ca.weblite:webview:.*'))
+    }
+    exclude 'module-info.class'
 }
 
 processResources {
+    def projectVersion = project.version.toString()
     filesMatching('**/*.properties') {
-        filter {
-            it.replace('${project.version}', project.version)
-        }
+        filter { it.replace('${project.version}', projectVersion) }
     }
 }

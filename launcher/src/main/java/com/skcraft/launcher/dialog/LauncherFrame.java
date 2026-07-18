@@ -10,6 +10,7 @@ import com.skcraft.concurrency.ObservableFuture;
 import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.InstanceList;
 import com.skcraft.launcher.Launcher;
+import com.skcraft.launcher.browser.WebpagePanel;
 import com.skcraft.launcher.launch.LaunchListener;
 import com.skcraft.launcher.launch.LaunchOptions;
 import com.skcraft.launcher.launch.LaunchOptions.UpdatePolicy;
@@ -72,7 +73,7 @@ public class LauncherFrame extends JFrame {
         instancesModel = new InstanceTableModel(launcher.getInstances());
 
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(400, 300));
+        setMinimumSize(new Dimension(520, 300));
         initComponents();
         pack();
         setLocationRelativeTo(null);
@@ -89,7 +90,7 @@ public class LauncherFrame extends JFrame {
 
     private void initComponents() {
         JPanel container = createContainerPanel();
-        container.setLayout(new MigLayout("fill, insets dialog", "[][]push[][]", "[grow][]"));
+        container.setLayout(new MigLayout("fill, insets dialog", "[grow]", "[grow][]"));
 
         webView = createNewsPanel();
         Border staticPanelBorder = createStaticPanelBorder();
@@ -97,6 +98,7 @@ public class LauncherFrame extends JFrame {
         webView.setBrowserBorder(staticPanelBorder);
         webView.setDarkTheme(LauncherLookAndFeel.isDarkTheme(launcher.getConfig().getThemeMode()));
         JPanel contentPanel = new JPanel(new MigLayout("ins 0, fill", "[200!][grow, fill]", "[grow, fill]"));
+        contentPanel.setPreferredSize(new Dimension(680, 350));
         contentPanel.add(instanceScroll, "grow");
         contentPanel.add(webView, "grow");
         selfUpdateButton.setVisible(launcher.getUpdateManager().getPendingUpdate());
@@ -116,12 +118,25 @@ public class LauncherFrame extends JFrame {
         launchButton.setFont(launchButton.getFont().deriveFont(Font.BOLD));
         launchButton.putClientProperty("FlatLaf.styleClass", "primary");
         bindEnterToLaunch();
-        container.add(contentPanel, "grow, wrap, span 5, gapbottom unrel, w null:680, h null:350");
-        container.add(refreshButton);
-        container.add(updateCheck);
-        container.add(selfUpdateButton);
-        container.add(optionsButton);
-        container.add(launchButton);
+        container.add(contentPanel, "grow, wrap, gapbottom unrel");
+
+        JPanel bottomBar = new JPanel(new BorderLayout());
+        bottomBar.setOpaque(false);
+
+        JPanel bottomLeft = new JPanel(new MigLayout("ins 0", "[]0[]", "[]"));
+        bottomLeft.setOpaque(false);
+        bottomLeft.add(refreshButton);
+        bottomLeft.add(updateCheck, "grow 0");
+
+        JPanel bottomRight = new JPanel(new MigLayout("ins 0, hidemode 3", "[]0[]0[]", "[]"));
+        bottomRight.setOpaque(false);
+        bottomRight.add(selfUpdateButton);
+        bottomRight.add(optionsButton);
+        bottomRight.add(launchButton);
+
+        bottomBar.add(bottomLeft, BorderLayout.WEST);
+        bottomBar.add(bottomRight, BorderLayout.EAST);
+        container.add(bottomBar, "growx");
         getRootPane().setDefaultButton(launchButton);
 
         add(container, BorderLayout.CENTER);
@@ -190,7 +205,15 @@ public class LauncherFrame extends JFrame {
      * @return the news panel
      */
     protected WebpagePanel createNewsPanel() {
-        return new WebpagePanel();
+        try {
+            return new WebpagePanel();
+        } catch (LinkageError e) {
+            log.warning("SWT Browser is unavailable; embedded news panel disabled");
+            return WebpagePanel.missingBrowser();
+        } catch (RuntimeException e) {
+            log.warning("SWT Browser failed to initialize; embedded news panel disabled");
+            return WebpagePanel.missingBrowser();
+        }
     }
 
     private static Border createStaticPanelBorder() {
@@ -226,6 +249,10 @@ public class LauncherFrame extends JFrame {
     }
 
     private void updateNewsPanel(boolean forceReload) {
+        if (webView == null) {
+            return;
+        }
+
         Instance instance = getSelectedInstance();
         URL newsUrl = launcher.getNewsURL(instance);
         if (!newsUrl.equals(lastLoggedNewsUrl)) {
@@ -442,10 +469,25 @@ public class LauncherFrame extends JFrame {
     private void showOptions() {
         ConfigurationDialog configDialog = new ConfigurationDialog(this, launcher);
         configDialog.setVisible(true);
-        webView.setDarkTheme(LauncherLookAndFeel.isDarkTheme(launcher.getConfig().getThemeMode()));
+        if (webView != null) {
+            webView.setDarkTheme(LauncherLookAndFeel.isDarkTheme(launcher.getConfig().getThemeMode()));
+        }
         if (configDialog.isGameKeyChanged()) {
             loadInstances();
         }
+    }
+
+    /**
+     * Dispose the frame, tearing down the embedded browser first so the native
+     * engine is released no matter how the window is closed.
+     */
+    @Override
+    public void dispose() {
+        if (webView != null) {
+            webView.disposeBrowser();
+            webView = null;
+        }
+        super.dispose();
     }
 
     private void launch() {

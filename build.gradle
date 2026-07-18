@@ -13,7 +13,6 @@ println """
 
 subprojects {
     apply plugin: 'java'
-    apply from: rootProject.file('gradle/openjfx.gradle')
 
     group = 'com.skcraft'
     version = '4.6-SNAPSHOT'
@@ -37,12 +36,6 @@ subprojects {
     tasks.withType(JavaExec) {
         workingDir = new File(rootDir, "run/")
         workingDir.mkdirs()
-    }
-
-    tasks.jar.enabled = false
-
-    plugins.withId('java-library') {
-        tasks.named('jar') { enabled = true }
     }
 }
 
