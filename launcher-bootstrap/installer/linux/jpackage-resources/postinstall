@@ -1,0 +1,47 @@
+#!/bin/sh
+set -e
+
+APP_SOURCE=""
+for candidate in \
+  "/opt/@LINUX_INSTALL_DIR@/lib/app" \
+  "/opt/@LINUX_INSTALL_DIR@" \
+  "/usr/lib/@LINUX_INSTALL_DIR@"; do
+  if [ -d "$candidate/bootstrap/launcher" ]; then
+    APP_SOURCE="$candidate"
+    break
+  fi
+done
+
+if [ -z "$APP_SOURCE" ]; then
+  exit 0
+fi
+
+TARGET_USER="${SUDO_USER:-}"
+if [ -z "$TARGET_USER" ] || [ "$TARGET_USER" = "root" ]; then
+  TARGET_USER="$(logname 2>/dev/null || echo root)"
+fi
+
+HOME_DIR="$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6)"
+if [ -z "$HOME_DIR" ]; then
+  HOME_DIR="${HOME:-/root}"
+fi
+
+DATA_HOME="${XDG_DATA_HOME:-$HOME_DIR/.local/share}"
+DATA_DIR="$DATA_HOME/@LINUX_DATA_DIR@"
+NATIVES_DIR="$DATA_DIR/natives"
+
+mkdir -p "$DATA_DIR"
+rm -rf "$DATA_DIR/launcher"
+cp -R "$APP_SOURCE/bootstrap/launcher" "$DATA_DIR/launcher"
+
+if [ -d "$APP_SOURCE/bootstrap/natives/swt" ]; then
+  mkdir -p "$NATIVES_DIR"
+  rm -rf "$NATIVES_DIR/swt"
+  cp -R "$APP_SOURCE/bootstrap/natives/swt" "$NATIVES_DIR/swt"
+fi
+
+if command -v chown >/dev/null 2>&1 && [ "$TARGET_USER" != "root" ]; then
+  chown -R "$TARGET_USER:$TARGET_USER" "$DATA_DIR" 2>/dev/null || true
+fi
+
+exit 0

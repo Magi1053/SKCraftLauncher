@@ -442,6 +442,50 @@ public class HttpRequest implements Closeable, ProgressObservable {
         return request("GET", url);
     }
 
+    public static long fetchContentLength(URL url) throws IOException {
+        long length = fetchContentLength(url, "HEAD");
+        if (length >= 0) {
+            return length;
+        }
+        return fetchContentLength(url, "GET");
+    }
+
+    private static long fetchContentLength(URL url, String method) throws IOException {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Java) SKMCLauncher");
+            conn.setInstanceFollowRedirects(true);
+            conn.setUseCaches(false);
+            conn.setReadTimeout(READ_TIMEOUT);
+            conn.setRequestMethod(method);
+            conn.connect();
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode >= 400) {
+                return -1;
+            }
+
+            long length = conn.getContentLengthLong();
+            if (length >= 0) {
+                return length;
+            }
+
+            String header = conn.getHeaderField("Content-Length");
+            if (header != null) {
+                try {
+                    return Long.parseLong(header);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            return -1;
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
     /**
      * Perform a POST request.
      *

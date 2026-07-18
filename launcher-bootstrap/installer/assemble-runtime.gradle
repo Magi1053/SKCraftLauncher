@@ -1,16 +1,14 @@
+apply from: "${projectDir}/installer/webview2-runtime.gradle"
+
 def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
 
 def runtimeModules = [
         'java.desktop',
         'java.logging',
-        'java.management',
-        'java.naming',
-        'java.sql',
         'java.xml',
         'jdk.crypto.ec',
         'jdk.httpserver',
         'jdk.charsets',
-        'jdk.management',
         'jdk.unsupported',
         'jdk.zipfs',
 ]
@@ -18,6 +16,14 @@ def runtimeModules = [
 def runtimeDir = layout.buildDirectory.dir('runtime')
 def appImageDir = layout.buildDirectory.dir('app-image')
 def windowsAppImageDir = layout.buildDirectory.dir('windows-app-image')
+def launcherShadowJar = project(':launcher').tasks.named('shadowJar')
+def bootstrapShadowJar = tasks.named('shadowJar')
+def deleteFiles = { Object... paths -> project.delete(paths) }
+def copyFiles = { Closure spec -> project.copy(spec) }
+
+def splashPng = file("${projectDir}/src/main/resources/com/skcraft/launcher/splash.png")
+
+def hostBrowser = configureHostBrowserRuntime()
 
 def writeIcoFromPng = { File sourcePng, File targetIco ->
     if (!sourcePng.isFile()) {
@@ -77,7 +83,7 @@ tasks.register('createRuntimeImage', Exec) {
         if (!jlinkExecutable.isFile()) {
             throw new GradleException("jlink executable not found at ${jlinkExecutable}. Install a JDK 17 that includes jlink.")
         }
-        project.delete(runtimeOutput)
+        deleteFiles(runtimeOutput)
 
         commandLine jlinkExecutable.absolutePath,
                 '--module-path', jmodsDir.absolutePath,
@@ -91,39 +97,65 @@ tasks.register('createRuntimeImage', Exec) {
 }
 
 tasks.register('assembleAppImage') {
-    dependsOn tasks.named('shadowJar'), tasks.named('createRuntimeImage')
+    dependsOn bootstrapShadowJar, tasks.named('createRuntimeImage'), launcherShadowJar
 
     doLast {
         def outputDir = appImageDir.get().asFile
         def appDir = new File(outputDir, 'app')
         def runtimeOutputDir = runtimeDir.get().asFile
-        def jarFile = tasks.named('shadowJar').get().archiveFile.get().asFile
+        def jarFile = bootstrapShadowJar.get().archiveFile.get().asFile
+        def launcherJarFile = launcherShadowJar.get().archiveFile.get().asFile
+        def launcherJarName = "${System.currentTimeMillis()}.jar"
 
-        project.delete(outputDir)
+        deleteFiles(outputDir)
         appDir.mkdirs()
 
-        project.copy {
+        copyFiles {
             from(runtimeOutputDir)
             into(new File(outputDir, 'runtime'))
         }
 
-        project.copy {
+        copyFiles {
             from(jarFile)
             into(appDir)
             rename { 'launcher-bootstrap.jar' }
         }
 
+        copyFiles {
+            from(splashPng)
+            into(appDir)
+        }
+
+        def bootstrapDir = new File(outputDir, 'bootstrap')
+
+        copyFiles {
+            from(launcherJarFile)
+            into(new File(bootstrapDir, 'launcher'))
+            rename { launcherJarName }
+        }
+
+        if (hostBrowser.stageSwt) {
+            copyFiles {
+                from(hostBrowser.swtConfiguration)
+                into(new File(bootstrapDir, hostBrowser.swtRuntimePath))
+                rename { hostBrowser.swtJarFileName }
+            }
+        }
+
+        File launcherPayloadDir = new File(bootstrapDir, 'launcher')
+        new File(launcherPayloadDir, 'launcher.version').text = project.ext.installerVersion
+
         def commandScript = new File(outputDir, 'launcher-bootstrap.cmd')
         commandScript.text = """@echo off
 set SCRIPT_DIR=%~dp0
-"%SCRIPT_DIR%runtime\\bin\\java.exe" -jar "%SCRIPT_DIR%app\\launcher-bootstrap.jar" %*
+"%SCRIPT_DIR%runtime\\bin\\java.exe" -splash:"%SCRIPT_DIR%app\\splash.png" -jar "%SCRIPT_DIR%app\\launcher-bootstrap.jar" %*
 """
 
         def shellScript = new File(outputDir, 'launcher-bootstrap')
         shellScript.text = '''#!/usr/bin/env sh
 set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$SCRIPT_DIR/runtime/bin/java" -jar "$SCRIPT_DIR/app/launcher-bootstrap.jar" "$@"
+exec "$SCRIPT_DIR/runtime/bin/java" -splash:"$SCRIPT_DIR/app/splash.png" -jar "$SCRIPT_DIR/app/launcher-bootstrap.jar" "$@"
 '''
         shellScript.setExecutable(true)
     }
@@ -132,16 +164,24 @@ exec "$SCRIPT_DIR/runtime/bin/java" -jar "$SCRIPT_DIR/app/launcher-bootstrap.jar
 tasks.register('createWindowsLauncher', Exec) {
     dependsOn tasks.named('assembleAppImage')
 
-    def stagedAppImageDir = appImageDir.get().asFile
-    def windowsImageOutputDir = windowsAppImageDir.get().asFile
+    def stagedAppImageDir = appImageDir
     def iconSourcePng = file("${projectDir}/src/main/resources/com/skcraft/launcher/bootstrapper_icon.png")
     def iconFile = layout.buildDirectory.file('tmp/windows/icon.ico').get().asFile
+
+    inputs.property('packageAppName', project.ext.packageAppNameWindows)
+    inputs.property('installerVersion', project.ext.installerVersion)
+    inputs.dir(stagedAppImageDir)
+    inputs.file(iconSourcePng)
+    outputs.dir(windowsAppImageDir.map { it.dir(project.ext.packageAppNameWindows) })
 
     onlyIf {
         hostOs.contains('win')
     }
 
     doFirst {
+        def appName = project.ext.packageAppNameWindows
+        def stagedAppImage = stagedAppImageDir.get().asFile
+        def windowsImageOutputDir = windowsAppImageDir.get().asFile
         def javaHome = jdk17Launcher.get().metadata.installationPath.asFile
         def jpackageExecutable = new File(javaHome, 'bin/jpackage.exe')
         if (!jpackageExecutable.isFile()) {
@@ -149,18 +189,40 @@ tasks.register('createWindowsLauncher', Exec) {
         }
         writeIcoFromPng(iconSourcePng, iconFile)
 
-        project.delete(windowsImageOutputDir)
+        deleteFiles(windowsImageOutputDir)
 
         commandLine jpackageExecutable.absolutePath,
                 '--type', 'app-image',
                 '--dest', windowsImageOutputDir.absolutePath,
-                '--name', 'SKCraft Launcher',
-                '--app-version', project.installerVersion,
+                '--name', appName,
+                '--app-version', project.ext.installerVersion,
                 '--vendor', 'SKCraft',
-                '--input', new File(stagedAppImageDir, 'app').absolutePath,
+                '--input', new File(stagedAppImage, 'app').absolutePath,
                 '--main-jar', 'launcher-bootstrap.jar',
                 '--main-class', 'com.skcraft.launcher.Bootstrap',
-                '--runtime-image', new File(stagedAppImageDir, 'runtime').absolutePath,
+                '--runtime-image', new File(stagedAppImage, 'runtime').absolutePath,
+                '--java-options', '-splash:$APPDIR/splash.png',
                 '--icon', iconFile.absolutePath
+    }
+
+    doLast {
+        def appName = project.ext.packageAppNameWindows
+        def stagedAppImage = stagedAppImageDir.get().asFile
+        def windowsImageOutputDir = windowsAppImageDir.get().asFile
+        def windowsAppDir = new File(windowsImageOutputDir, appName)
+        copyFiles {
+            from(new File(stagedAppImage, 'app/splash.png'))
+            into(new File(windowsAppDir, 'app'))
+        }
+
+        def bootstrapDir = new File(windowsAppDir, 'bootstrap')
+        copyFiles {
+            from(new File(stagedAppImage, 'bootstrap/launcher'))
+            into(new File(bootstrapDir, 'launcher'))
+        }
+        copyFiles {
+            from(new File(stagedAppImage, "bootstrap/${hostBrowser.swtRuntimePath}"))
+            into(new File(bootstrapDir, hostBrowser.swtRuntimePath))
+        }
     }
 }

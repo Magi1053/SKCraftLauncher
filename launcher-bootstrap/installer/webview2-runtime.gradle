@@ -1,0 +1,34 @@
+ext.webview2BootstrapperUrl = 'https://go.microsoft.com/fwlink/?linkid=2124703'
+ext.webview2BootstrapperFileName = 'MicrosoftEdgeWebview2Setup.exe'
+ext.webview2RuntimeDir = layout.buildDirectory.dir('webview2-runtime')
+def deleteFiles = { Object... paths -> project.delete(paths) }
+
+tasks.register('downloadWebView2Bootstrapper') {
+    group = 'distribution'
+    description = 'Download Microsoft Edge WebView2 Evergreen bootstrapper for the Windows installer.'
+
+    inputs.property('webview2BootstrapperUrl', webview2BootstrapperUrl)
+    outputs.file(webview2RuntimeDir.map { it.file(webview2BootstrapperFileName) })
+
+    doLast {
+        File outputDir = webview2RuntimeDir.get().asFile
+        File bootstrapper = new File(outputDir, webview2BootstrapperFileName)
+
+        deleteFiles(outputDir)
+        if (!outputDir.mkdirs() && !outputDir.isDirectory()) {
+            throw new GradleException("Failed to create WebView2 runtime directory: ${outputDir}")
+        }
+
+        URL url = new URL(webview2BootstrapperUrl)
+        logger.lifecycle("Downloading WebView2 bootstrapper from ${url}")
+        url.openStream().withCloseable { input ->
+            bootstrapper.withOutputStream { output ->
+                output << input
+            }
+        }
+
+        if (!bootstrapper.isFile() || bootstrapper.length() == 0) {
+            throw new GradleException("WebView2 bootstrapper download failed.")
+        }
+    }
+}

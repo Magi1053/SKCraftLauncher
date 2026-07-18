@@ -15,6 +15,8 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,9 +40,14 @@ public class Downloader implements Runnable, ProgressObservable {
     private DownloadFrame dialog;
     private HttpRequest httpRequest;
     private Thread thread;
+    private List<LauncherBinary> binaries;
 
     public Downloader(Bootstrap bootstrap) {
-        this(bootstrap, Mode.INITIAL, null, Collections.<LauncherBinary>emptyList());
+        this(bootstrap, Collections.<LauncherBinary>emptyList());
+    }
+
+    public Downloader(Bootstrap bootstrap, List<LauncherBinary> existingBinaries) {
+        this(bootstrap, Mode.INITIAL, null, existingBinaries);
     }
 
     public Downloader(Bootstrap bootstrap, URL updateUrl, List<LauncherBinary> existingBinaries) {
@@ -61,27 +68,27 @@ public class Downloader implements Runnable, ProgressObservable {
         try {
             execute();
         } catch (InterruptedException e) {
-            log.log(Level.WARNING, "Interrupted");
+            if (hasFallbackBinaries()) {
+                log.info("Download interrupted; launching bundled launcher.");
+            } else {
+                log.log(Level.WARNING, "Interrupted");
+            }
             launchFallbackOrExit();
         } catch (Throwable t) {
-            log.log(Level.WARNING, "Failed to download launcher", t);
-            if (mode == Mode.INITIAL) {
-                SwingHelper.showErrorDialog(null, tr("errors.failedDownloadError"), tr("errorTitle"), t);
+            if (hasFallbackBinaries()) {
+                log.log(Level.INFO, "Download failed; launching bundled launcher.", t);
+            } else {
+                log.log(Level.WARNING, "Failed to download launcher", t);
+                if (mode == Mode.INITIAL) {
+                    SwingHelper.showErrorDialog(null, tr("errors.failedDownloadError"), tr("errorTitle"), t);
+                }
             }
             launchFallbackOrExit();
         }
     }
 
     private void execute() throws Exception {
-        SwingUtilities.invokeAndWait(new Runnable() {
-            @Override
-            public void run() {
-                Bootstrap.setSwingLookAndFeel();
-                dialog = new DownloadFrame(Downloader.this);
-                dialog.setVisible(true);
-                dialog.setDownloader(Downloader.this);
-            }
-        });
+        setupProgressUi();
 
         List<LauncherBinary> binaries = new ArrayList<LauncherBinary>(existingBinaries);
         URL resolvedUrl = resolveDownloadUrl();
@@ -103,19 +110,53 @@ public class Downloader implements Runnable, ProgressObservable {
             finalFile.delete();
             tempFile.renameTo(finalFile);
 
+            writeLauncherVersionFile(finalFile);
+
             LauncherBinary binary = new LauncherBinary(finalFile);
             binaries.add(binary);
         } finally {
+            teardownProgressUi();
+        }
+
+        finish(binaries);
+    }
+
+    public List<LauncherBinary> getBinaries() {
+        return binaries;
+    }
+
+    private void finish(List<LauncherBinary> binaries) {
+        this.binaries = binaries;
+    }
+
+    private void setupProgressUi() throws Exception {
+        if (mode != Mode.UPDATE && hasFallbackBinaries()) {
+            return;
+        }
+
+        SwingUtilities.invokeAndWait(new Runnable() {
+            @Override
+            public void run() {
+                Bootstrap.setSwingLookAndFeel();
+                dialog = new DownloadFrame(Downloader.this);
+                dialog.setVisible(true);
+                dialog.setDownloader(Downloader.this);
+            }
+        });
+    }
+
+    private void teardownProgressUi() {
+        if (dialog != null) {
+            final DownloadFrame frame = dialog;
+            dialog = null;
             SwingUtilities.invokeLater(new Runnable() {
                 @Override
                 public void run() {
-                    dialog.setDownloader(null);
-                    dialog.dispose();
+                    frame.setDownloader(null);
+                    frame.dispose();
                 }
             });
         }
-
-        bootstrap.launchExisting(binaries, false);
     }
 
     private URL resolveDownloadUrl() throws Exception {
@@ -126,7 +167,7 @@ public class Downloader implements Runnable, ProgressObservable {
             return updateUrl;
         }
 
-        URL latestUrl = HttpRequest.url(bootstrap.getProperties().getProperty("latestUrl"));
+        URL latestUrl = HttpRequest.url(bootstrap.resolveSelfUpdateUrl());
         log.info("Reading update URL " + latestUrl + "...");
 
         String data = HttpRequest
@@ -152,16 +193,35 @@ public class Downloader implements Runnable, ProgressObservable {
     }
 
     private void launchFallbackOrExit() {
-        if (mode == Mode.UPDATE && !existingBinaries.isEmpty()) {
-            try {
-                bootstrap.launchExisting(new ArrayList<LauncherBinary>(existingBinaries), false);
-                return;
-            } catch (Throwable t) {
-                log.log(Level.WARNING, "Failed to launch existing launcher after update interruption", t);
-            }
+        teardownProgressUi();
+
+        List<LauncherBinary> binaries = existingBinaries.isEmpty()
+                ? discoverLocalBinaries()
+                : new ArrayList<LauncherBinary>(existingBinaries);
+
+        if (!binaries.isEmpty()) {
+            finish(binaries);
+            return;
         }
 
-        System.exit(0);
+        System.exit(1);
+    }
+
+    private boolean hasFallbackBinaries() {
+        return !existingBinaries.isEmpty() || !discoverLocalBinaries().isEmpty();
+    }
+
+    private List<LauncherBinary> discoverLocalBinaries() {
+        File[] files = bootstrap.getBinariesDir().listFiles(new LauncherBinary.Filter());
+        if (files == null || files.length == 0) {
+            return Collections.emptyList();
+        }
+
+        List<LauncherBinary> binaries = new ArrayList<LauncherBinary>();
+        for (File file : files) {
+            binaries.add(new LauncherBinary(file));
+        }
+        return binaries;
     }
 
     public void cancel() {
@@ -184,5 +244,11 @@ public class Downloader implements Runnable, ProgressObservable {
     public double getProgress() {
         HttpRequest httpRequest = this.httpRequest;
         return httpRequest != null ? httpRequest.getProgress() : -1;
+    }
+
+    private static void writeLauncherVersionFile(File launcherJar) throws IOException {
+        String version = JarVersionReader.readVersion(launcherJar);
+        File versionFile = new File(launcherJar.getParentFile(), "launcher.version");
+        Files.writeString(versionFile.toPath(), version.trim(), StandardCharsets.UTF_8);
     }
 }

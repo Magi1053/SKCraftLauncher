@@ -29,7 +29,7 @@ public class UpdateChecker {
     public UpdateInfo checkForUpdate(String currentVersion) {
         try {
             String encodedVersion = URLEncoder.encode(currentVersion, "UTF-8");
-            String latestUrl = bootstrap.getProperties().getProperty("latestUrl");
+            String latestUrl = bootstrap.resolveSelfUpdateUrl();
             URL url = HttpRequest.url(latestUrl + "?version=" + encodedVersion);
 
             String data = HttpRequest.get(url)

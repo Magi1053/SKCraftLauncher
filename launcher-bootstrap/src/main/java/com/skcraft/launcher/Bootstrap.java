@@ -7,6 +7,7 @@
 package com.skcraft.launcher;
 
 import com.skcraft.launcher.bootstrap.*;
+import com.skcraft.launcher.bootstrap.platform.PlatformSupport;
 import lombok.Getter;
 import lombok.extern.java.Log;
 
@@ -18,6 +19,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.logging.Level;
 
@@ -34,6 +38,9 @@ public class Bootstrap {
     private final String[] originalArgs;
 
     public static void main(String[] args) throws Throwable {
+        // Must run before any UI so the process matches Start Menu shortcut identity.
+        applyAppIdentity();
+
         SimpleLogFormatter.configureGlobalLogger();
         BootstrapFileLogging.init();
         SharedLocale.loadBundle("com.skcraft.launcher.lang.Bootstrap", Locale.getDefault());
@@ -49,13 +56,21 @@ public class Bootstrap {
         }
     }
 
+    private static void applyAppIdentity() {
+        try {
+            PlatformSupport.INSTANCE.applyAppIdentity(Bootstrap.class);
+        } catch (Throwable t) {
+            log.log(Level.FINE, "Unable to apply platform app identity", t);
+        }
+    }
+
     public Bootstrap(String[] args) throws IOException {
         this.properties = BootstrapUtils.loadProperties(
                 Bootstrap.class,
                 "bootstrap.properties",
                 "com.skcraft.launcher.bootstrap.propertiesFile");
 
-        File baseDir = resolveDataDir();
+        File baseDir = BootstrapUtils.resolveDataDir(properties, Bootstrap.class);
 
         this.baseDir = baseDir;
         BootstrapFileLogging.attachFile(this.baseDir);
@@ -91,8 +106,10 @@ public class Bootstrap {
             }
         }
 
+        refreshLauncherVersionFile(binaries);
+
         if (binaries.isEmpty()) {
-            launchInitial();
+            downloadAndLaunch(Collections.<LauncherBinary>emptyList());
             return;
         }
 
@@ -109,7 +126,7 @@ public class Bootstrap {
             UpdateChecker.UpdateInfo updateInfo = new UpdateChecker(this).checkForUpdate(currentVersion);
             if (updateInfo != null) {
                 log.info("Found launcher update " + updateInfo.getVersion() + "; downloading before launch.");
-                launchUpdate(binaries, updateInfo.getUrl());
+                downloadAndLaunch(new Downloader(this, updateInfo.getUrl(), binaries));
                 return;
             }
         } catch (Throwable t) {
@@ -119,15 +136,37 @@ public class Bootstrap {
         launchExisting(binaries, true);
     }
 
-    public void launchInitial() throws Exception {
+    private void downloadAndLaunch(List<LauncherBinary> existingBinaries) throws Exception {
         Bootstrap.log.info("Downloading the launcher...");
-        Thread thread = new Thread(new Downloader(this));
-        thread.start();
+        downloadAndLaunch(new Downloader(this, existingBinaries));
     }
 
-    private void launchUpdate(List<LauncherBinary> binaries, URL updateUrl) {
-        Thread thread = new Thread(new Downloader(this, updateUrl, binaries));
+    private void downloadAndLaunch(Downloader downloader) throws Exception {
+        Thread thread = new Thread(downloader);
         thread.start();
+        thread.join();
+
+        List<LauncherBinary> binaries = downloader.getBinaries();
+        if (binaries != null && !binaries.isEmpty()) {
+            launchExisting(binaries, false);
+        }
+    }
+
+    private void refreshLauncherVersionFile(List<LauncherBinary> binaries) {
+        LauncherBinary newest = findNewestExecutableBinary(binaries);
+        if (newest == null) {
+            return;
+        }
+
+        try {
+            String version = JarVersionReader.readVersion(newest.getPath());
+            Files.writeString(
+                    new File(binariesDir, "launcher.version").toPath(),
+                    version.trim(),
+                    StandardCharsets.UTF_8);
+        } catch (Throwable t) {
+            log.log(Level.WARNING, "Unable to write launcher.version sidecar.", t);
+        }
     }
 
     private LauncherBinary findNewestExecutableBinary(List<LauncherBinary> binaries) {
@@ -147,6 +186,7 @@ public class Bootstrap {
         Collections.sort(binaries);
         LauncherBinary working = null;
         Class<?> clazz = null;
+        Throwable lastFailure = null;
 
         for (LauncherBinary binary : binaries) {
             File testFile = binary.getPath();
@@ -158,6 +198,7 @@ public class Bootstrap {
                 working = binary;
                 break;
             } catch (Throwable t) {
+                lastFailure = t;
                 Bootstrap.log.log(Level.WARNING, "Failed to load " + testFile.getAbsoluteFile(), t);
             }
         }
@@ -173,14 +214,21 @@ public class Bootstrap {
             execute(clazz);
         } else {
             if (redownload) {
-                launchInitial();
+                downloadAndLaunch(binaries);
+            } else if (lastFailure != null) {
+                String message = lastFailure.getMessage();
+                if (message == null || message.trim().isEmpty()) {
+                    message = "Failed to find launchable .jar";
+                }
+                throw new IOException(message, lastFailure);
             } else {
                 throw new IOException("Failed to find launchable .jar");
             }
         }
     }
 
-    public void execute(Class<?> clazz) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+    public void execute(Class<?> clazz)
+            throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         Method method = clazz.getDeclaredMethod("main", String[].class);
         String[] launcherArgs = new String[] {
                 "--dir",
@@ -194,23 +242,59 @@ public class Bootstrap {
 
         log.info("Launching with arguments " + Arrays.toString(args));
 
-        method.invoke(null, new Object[] { args });
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        thread.setContextClassLoader(clazz.getClassLoader());
+        try {
+            method.invoke(null, new Object[] { args });
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
+
+    public String resolveSelfUpdateUrl() throws IOException {
+        File[] files = binariesDir.listFiles(new LauncherBinary.Filter());
+        if (files != null && files.length > 0) {
+            List<LauncherBinary> binaries = new ArrayList<LauncherBinary>();
+            for (File file : files) {
+                binaries.add(new LauncherBinary(file));
+            }
+            Collections.sort(binaries);
+
+            for (int i = binaries.size() - 1; i >= 0; i--) {
+                try {
+                    return JarVersionReader.readSelfUpdateUrl(binaries.get(i).getPath());
+                } catch (IOException e) {
+                    log.log(Level.WARNING, "Unable to read self-update URL from " + binaries.get(i).getPath(), e);
+                }
+            }
+        }
+
+        return JarVersionReader.readSelfUpdateUrlFromClasspath(Bootstrap.class);
     }
 
     public Class<?> load(File jarFile) throws Exception {
-        URL[] urls = new URL[] { jarFile.toURI().toURL() };
-        URLClassLoader child = new URLClassLoader(urls, this.getClass().getClassLoader());
+        URL launcherUrl = jarFile.toURI().toURL();
+        URL[] urls = resolveLauncherClasspath(launcherUrl);
+        URLClassLoader child = new URLClassLoader(urls, ClassLoader.getPlatformClassLoader());
         Class<?> clazz = Class.forName(getProperties().getProperty("launcherClass"), true, child);
 
-        String latestUrl = getProperties().getProperty("latestUrl");
-        Properties prop = new Properties();
-        prop.load(clazz.getResourceAsStream("launcher.properties"));
-        String selfUpdateUrl = prop.getProperty("selfUpdateUrl");
-        if (!Objects.equals(latestUrl, selfUpdateUrl)) {
+        String expectedUrl = resolveSelfUpdateUrl();
+        String actualUrl = JarVersionReader.readSelfUpdateUrl(jarFile);
+        if (!Objects.equals(expectedUrl, actualUrl)) {
             throw new Exception("Self Update URL is not equal to Latest URL");
         }
 
         return clazz;
+    }
+
+    private URL[] resolveLauncherClasspath(URL launcherUrl) throws Exception {
+        try (URLClassLoader resolver = new URLClassLoader(
+                new URL[] { launcherUrl }, ClassLoader.getPlatformClassLoader())) {
+            Class<?> runtime = Class.forName("com.skcraft.launcher.browser.BrowserRuntime", true, resolver);
+            Method method = runtime.getMethod("resolveLauncherClasspath", URL.class, Path.class);
+            return (URL[]) method.invoke(null, launcherUrl, baseDir.toPath());
+        }
     }
 
     public static void setSwingLookAndFeel() {
@@ -218,70 +302,5 @@ public class Bootstrap {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Throwable e) {
         }
-    }
-
-    private File resolveDataDir() throws IOException {
-        if (!isWindows()) {
-            return getUserLauncherDir();
-        }
-
-        File installDir = BootstrapUtils.getWindowsInstallDir(Bootstrap.class);
-        if (installDir == null) {
-            throw new IOException("Unable to determine launcher install directory.");
-        }
-        if (!ensureWritableDirectory(installDir)) {
-            throw new IOException("Install directory is not writable: " + installDir);
-        }
-
-        LegacyDocumentsMigrator.migrateIfNeeded(installDir, BootstrapUtils.getLegacyWindowsDataDir(properties));
-
-        File cwd = new File(System.getProperty("user.dir")).getAbsoluteFile();
-        if (isWritableDirectory(cwd) && pathsEqual(cwd, installDir)) {
-            return installDir;
-        }
-
-        log.info("Using install directory for launcher data: " + installDir.getAbsolutePath());
-        return installDir;
-    }
-
-    private static boolean ensureWritableDirectory(File dir) {
-        if (!dir.exists() && !dir.mkdirs()) {
-            return false;
-        }
-        return isWritableDirectory(dir);
-    }
-
-    private static boolean isWritableDirectory(File dir) {
-        return dir.isDirectory() && dir.canWrite();
-    }
-
-    private static boolean pathsEqual(File first, File second) {
-        try {
-            return first.getCanonicalPath().equalsIgnoreCase(second.getCanonicalPath());
-        } catch (IOException e) {
-            return first.getAbsolutePath().equalsIgnoreCase(second.getAbsolutePath());
-        }
-    }
-
-    private static boolean isWindows() {
-        return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win");
-    }
-
-    private File getUserLauncherDir() {
-        String osName = System.getProperty("os.name").toLowerCase(Locale.ROOT);
-
-        File dotFolder = new File(System.getProperty("user.home"), getProperties().getProperty("homeFolder"));
-        String xdgFolderName = getProperties().getProperty("homeFolderLinux");
-
-        if (osName.contains("linux") && !dotFolder.exists() && xdgFolderName != null && !xdgFolderName.isEmpty()) {
-            String xdgDataHome = System.getenv("XDG_DATA_HOME");
-            if (xdgDataHome == null || xdgDataHome.isEmpty()) {
-                xdgDataHome = System.getProperty("user.home") + "/.local/share";
-            }
-
-            return new File(xdgDataHome, xdgFolderName);
-        }
-
-        return dotFolder;
     }
 }

@@ -1,0 +1,37 @@
+#!/bin/sh
+set -e
+
+# PKG args: $2 = install location, $3 = target volume
+APP_BUNDLE="${3:-/}${2:-/Applications/@MAC_APP_NAME@.app}"
+APP_SOURCE="$APP_BUNDLE/Contents/app"
+
+if [ ! -d "$APP_SOURCE/bootstrap/launcher" ]; then
+  APP_SOURCE="/Applications/@MAC_APP_NAME@.app/Contents/app"
+fi
+
+if [ ! -d "$APP_SOURCE/bootstrap/launcher" ]; then
+  echo "Bundled launcher not found under @MAC_APP_NAME@.app" >&2
+  exit 1
+fi
+
+TARGET_USER="$(stat -f %Su /dev/console 2>/dev/null || echo "${SUDO_USER:-}")"
+if [ -z "$TARGET_USER" ] || [ "$TARGET_USER" = "root" ]; then
+  TARGET_USER="${USER:-root}"
+fi
+
+HOME_DIR="$(dscl . -read "/Users/$TARGET_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+if [ -z "$HOME_DIR" ]; then
+  HOME_DIR="${HOME:-/var/root}"
+fi
+
+DATA_DIR="$HOME_DIR/@MAC_DATA_DIR@"
+mkdir -p "$DATA_DIR"
+
+rm -rf "$DATA_DIR/launcher"
+cp -R "$APP_SOURCE/bootstrap/launcher" "$DATA_DIR/launcher"
+
+if [ "$TARGET_USER" != "root" ]; then
+  chown -R "$TARGET_USER" "$DATA_DIR" 2>/dev/null || true
+fi
+
+exit 0

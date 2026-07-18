@@ -6,18 +6,21 @@
 
 package com.skcraft.launcher.bootstrap;
 
-import javax.swing.JFileChooser;
-import javax.swing.filechooser.FileSystemView;
+import com.skcraft.launcher.bootstrap.platform.PlatformSupport;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
 public final class BootstrapUtils {
+
+    public static final String DATA_SUBDIR = "bootstrap";
 
     private static final Pattern absoluteUrlPattern = Pattern.compile("^[A-Za-z0-9\\-]+://.*$");
 
@@ -78,45 +81,28 @@ public final class BootstrapUtils {
         }
     }
 
-    public static File getWindowsInstallDir(Class<?> clazz) {
-        File codeSourcePath = resolveCodeSourcePath(clazz);
-        if (codeSourcePath == null || !codeSourcePath.isFile() || !codeSourcePath.getName().endsWith(".jar")) {
-            return null;
+    /** Filesystem-safe install id: strip non-alphanumeric (case preserved). */
+    public static String sanitizeInstallDirName(String name) {
+        if (name == null) {
+            return "launcher";
         }
-
-        File jarDir = codeSourcePath.getParentFile();
-        if (jarDir == null) {
-            return null;
+        String sanitized = name.replaceAll("[^A-Za-z0-9_-]", "");
+        if (sanitized.isEmpty()) {
+            return "launcher";
         }
-
-        if ("app".equalsIgnoreCase(jarDir.getName())) {
-            File parent = jarDir.getParentFile();
-            if (parent != null && new File(parent, "runtime").isDirectory()) {
-                return parent;
-            }
-        }
-
-        return jarDir;
+        return sanitized;
     }
 
-    public static File getLegacyWindowsDataDir(Properties properties) {
-        File documentsDir = getDocumentsDir();
-        if (documentsDir == null || properties == null) {
-            return null;
-        }
-
-        String folderName = properties.getProperty("homeFolderWindows");
-        if (folderName == null || folderName.trim().isEmpty()) {
-            return null;
-        }
-
-        return new File(documentsDir, folderName);
+    /**
+     * Lowercase alphanumeric data dir id for XDG paths (matches Linux install dir
+     * sanitization).
+     */
+    public static String sanitizeLinuxDataDirName(String name) {
+        return sanitizeInstallDirName(name).toLowerCase(Locale.ROOT);
     }
 
-    private static File getDocumentsDir() {
-        JFileChooser chooser = new JFileChooser();
-        FileSystemView fileSystemView = chooser.getFileSystemView();
-        return fileSystemView != null ? fileSystemView.getDefaultDirectory() : null;
+    public static File resolveDataDir(Properties properties, Class<?> clazz) throws IOException {
+        return PlatformSupport.INSTANCE.resolveDataDir(properties, clazz);
     }
 
     private static File resolveSidecarPropertiesFile(Class<?> clazz, String name) {

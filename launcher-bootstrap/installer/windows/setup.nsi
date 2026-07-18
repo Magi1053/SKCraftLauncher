@@ -1,44 +1,37 @@
+; --- Includes ---
+
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
+!include "WordFunc.nsh"
+!include "FileFunc.nsh"
 
-!ifndef MyAppVersion
-  !define MyAppVersion "1.0.0"
-!endif
+!define WindowsInstallerDir "${__FILEDIR__}"
 
-!ifndef AppImageDir
-  !define AppImageDir "${__FILEDIR__}\..\..\build\windows-app-image\SKCraft Launcher"
-!endif
+!include "include\defines.nsh"
+!include "include\vars.nsh"
+!include "include\macros.nsh"
+!include "include\install.nsh"
+!include "include\webview2.nsh"
+!include "include\migration.nsh"
+!include "include\launcher.nsh"
+!include "include\uninstall.nsh"
 
-!ifndef OutputDir
-  !define OutputDir "${__FILEDIR__}\..\..\build\installer\windows"
-!endif
-!ifndef IconIco
-  !define IconIco "${__FILEDIR__}\..\..\build\tmp\windows\icon.ico"
-!endif
-
-!define AppName "SKCraft Launcher"
-!define AppId "SKCraftLauncher"
-
-Unicode True
-Name "${AppName}"
-OutFile "${OutputDir}\SKCraftLauncherSetup.exe"
-InstallDir "$LOCALAPPDATA\${AppName}"
-RequestExecutionLevel user
-SetCompressor /SOLID lzma
-ShowInstDetails show
-ShowUninstDetails show
+; --- MUI pages & language ---
 
 !define MUI_ABORTWARNING
 !define MUI_ICON "${IconIco}"
 !define MUI_UNICON "${IconIco}"
-!define MUI_FINISHPAGE_RUN "$INSTDIR\SKCraft Launcher.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Launch SKCraft Launcher"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${AppExeName}"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${AppName}"
 !define MUI_FINISHPAGE_SHOWREADME ""
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create a desktop shortcut"
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
 
 !insertmacro MUI_PAGE_WELCOME
+Page custom MigrateLegacyPageShow MigrateLegacyPageLeave
+Page custom WebView2PageShow WebView2PageLeave
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW DirectoryPageShow
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -48,90 +41,125 @@ UninstPage custom un.UninstallConfirmShow un.UninstallConfirmLeave
 
 !insertmacro MUI_LANGUAGE "English"
 
-Section "SKCraft Launcher" SEC_MAIN
-  SectionIn RO
-  SetShellVarContext current
+Function .onInit
+	SetShellVarContext current
+	; Expand %NAME% placeholders on the target machine before the directory page.
+	ExpandEnvStrings $INSTDIR "${InstallBaseDir}\${InstallDirName}"
+FunctionEnd
 
-  SetOutPath "$INSTDIR"
-  File /r "${AppImageDir}\*"
-  File "${IconIco}"
+; --- Install section ---
 
-  WriteUninstaller "$INSTDIR\uninstall.exe"
+Section "${AppName}" SEC_MAIN
+	SectionIn RO
+	SetShellVarContext current
 
-  CreateDirectory "$SMPROGRAMS\SKCraft Launcher"
-  SetOutPath "$INSTDIR"
-  CreateShortcut "$SMPROGRAMS\SKCraft Launcher\SKCraft Launcher.lnk" "$INSTDIR\SKCraft Launcher.exe" "" "$INSTDIR\icon.ico"
-  CreateShortcut "$SMPROGRAMS\SKCraft Launcher\Uninstall SKCraft Launcher.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\icon.ico"
+	SetOutPath "$INSTDIR"
+	StrCpy $DataDir "$INSTDIR\${BootstrapSubdir}"
+	Delete "$INSTDIR\install.log"
+	SetDetailsPrint both
+	Call InitInstallLog
 
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "DisplayName" "${AppName}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "DisplayVersion" "${MyAppVersion}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "DisplayIcon" "$INSTDIR\icon.ico"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "UninstallString" '"$INSTDIR\uninstall.exe"'
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "NoModify" 1
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "NoRepair" 1
+	!insertmacro DetailPrintLog "Starting ${AppName} ${MyAppVersion} installation."
+
+	${If} ${Silent}
+		Call PrepareLegacyMigration
+		Call PrepareWebView2
+	${EndIf}
+
+	Call MigrateLegacyDocuments
+	Call MigrateFlatDataLayout
+	Call DeleteObsoleteNativeCaches
+
+	Call ShouldInstallBundledLauncher
+
+	!insertmacro DetailPrintLog "Extracting application runtime."
+	SetOutPath "$INSTDIR"
+	File /r "${AppImageDir}\runtime"
+	File /r "${AppImageDir}\app"
+	File "${AppImageDir}\${AppExeName}"
+	!insertmacro LogInstalledPath "$INSTDIR\runtime"
+	!insertmacro LogInstalledPath "$INSTDIR\app"
+	!insertmacro LogInstalledPath "$INSTDIR\${AppExeName}"
+
+	IntCmp $ShouldInstallLauncher 1 installLauncher keepLauncher
+
+	installLauncher:
+	!insertmacro DetailPrintLog "Installing bundled launcher ${MyAppVersion}."
+	RMDir /r "$DataDir\launcher"
+	SetOutPath "$DataDir\launcher"
+	File /r "${AppImageDir}\bootstrap\launcher\*"
+	!insertmacro LogInstalledPath "$DataDir\launcher"
+	Goto installSwt
+
+	keepLauncher:
+	!insertmacro DetailPrintLog "Keeping existing launcher cache (installed version/update URL policy keeps local files)."
+
+	installSwt:
+	!insertmacro DetailPrintLog "Installing SWT runtime jar."
+	SetOutPath "$DataDir\${NativesSubdir}\swt"
+	File /r "${AppImageDir}\bootstrap\natives\swt\*"
+	!insertmacro LogInstalledPath "$DataDir\${NativesSubdir}\swt"
+
+	IfFileExists "$DataDir\launcher\*.*" 0 missingLauncherDir
+	!insertmacro DetailPrintLogSuffix "Launcher jar present at " "$DataDir\launcher"
+	IfFileExists "$DataDir\${NativesSubdir}\swt\*.*" 0 missingSwtDir
+	!insertmacro DetailPrintLogSuffix "SWT runtime payload present at " "$DataDir\${NativesSubdir}\swt"
+	Goto appPayloadDone
+
+	missingLauncherDir:
+	!insertmacro DetailPrintLog "Bundled launcher directory was not found."
+	Abort
+
+	missingSwtDir:
+	!insertmacro DetailPrintLog "SWT runtime payload was not found."
+	Abort
+
+	appPayloadDone:
+	!insertmacro DetailPrintLog "Writing uninstaller, shortcuts, and uninstall registry entries."
+
+	WriteUninstaller "$INSTDIR\uninstall.exe"
+
+	CreateDirectory "$SMPROGRAMS\${AppName}"
+	!insertmacro CreateAppShortcut "$SMPROGRAMS\${AppName}\${AppName}.lnk"
+	CreateShortcut "$SMPROGRAMS\${AppName}\Uninstall ${AppName}.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\${AppExeName}"
+
+	WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "DisplayName" "${AppName}"
+	WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "DisplayVersion" "${MyAppVersion}"
+	WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "DisplayIcon" "$INSTDIR\${AppExeName}"
+	WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "UninstallString" \
+		'"$INSTDIR\uninstall.exe"'
+	WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "NoModify" 1
+	WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}" "NoRepair" 1
+
+	Call InstallWebView2IfRequested
+
+	!insertmacro DetailPrintLog "Installation completed successfully."
 SectionEnd
 
-Function CreateDesktopShortcut
-  SetShellVarContext current
-  SetOutPath "$INSTDIR"
-  CreateShortcut "$DESKTOP\SKCraft Launcher.lnk" "$INSTDIR\SKCraft Launcher.exe" "" "$INSTDIR\icon.ico"
-FunctionEnd
-
-Var un.DeleteUserDataCheckbox
-Var un.DeleteUserData
-
-Function un.UninstallConfirmShow
-  StrCpy $un.DeleteUserData 0
-  !insertmacro MUI_HEADER_TEXT "Confirm Removal" "Remove ${AppName} from your computer."
-
-  nsDialogs::Create 1018
-  Pop $0
-  ${If} $0 == error
-    Abort
-  ${EndIf}
-
-  ${NSD_CreateLabel} 0 0 100% 24u "Are you sure you want to completely remove ${AppName} and all of its components?"
-  Pop $0
-
-  ${NSD_CreateCheckbox} 0 30u 100% 12u "Delete instance data (config, accounts, instances, assets)"
-  Pop $un.DeleteUserDataCheckbox
-  ${NSD_Uncheck} $un.DeleteUserDataCheckbox
-
-  nsDialogs::Show
-FunctionEnd
-
-Function un.UninstallConfirmLeave
-  ${NSD_GetState} $un.DeleteUserDataCheckbox $0
-  StrCpy $un.DeleteUserData $0
-FunctionEnd
+; --- Uninstall section ---
 
 Section "Uninstall" un.SEC_MAIN
-  SectionIn RO
-  SetShellVarContext current
-  Delete "$DESKTOP\SKCraft Launcher.lnk"
-  Delete "$SMPROGRAMS\SKCraft Launcher\SKCraft Launcher.lnk"
-  Delete "$SMPROGRAMS\SKCraft Launcher\Uninstall SKCraft Launcher.lnk"
-  RMDir "$SMPROGRAMS\SKCraft Launcher"
+	SectionIn RO
+	SetShellVarContext current
+	StrCpy $DataDir "$INSTDIR\${BootstrapSubdir}"
+	Delete "$DESKTOP\${AppName}.lnk"
+	Delete "$SMPROGRAMS\${AppName}\${AppName}.lnk"
+	Delete "$SMPROGRAMS\${AppName}\Uninstall ${AppName}.lnk"
+	RMDir "$SMPROGRAMS\${AppName}"
 
-  Delete "$INSTDIR\SKCraft Launcher.exe"
-  Delete "$INSTDIR\SKCraft Launcher.cfg"
-  Delete "$INSTDIR\icon.ico"
-  Delete "$INSTDIR\uninstall.exe"
-  RMDir /r "$INSTDIR\runtime"
-  RMDir /r "$INSTDIR\app"
-  RMDir /r "$INSTDIR\launcher"
+	!insertmacro UninstallBulkRemoveDir "$INSTDIR\app"
+	Delete "$INSTDIR\install.log"
+	Delete "$INSTDIR\${AppExeName}"
+	!insertmacro UninstallBulkRemoveDir "$INSTDIR\runtime"
+	!insertmacro UninstallBulkRemoveDir "$INSTDIR\webview2"
+	Delete "$INSTDIR\uninstall.exe"
 
-  Call un.DeleteUserDataIfSelected
-  RMDir "$INSTDIR"
+	!insertmacro DeleteManagedBootstrapData
+	IntCmp $un.DeleteUserData 1 unDeleteUserData unBootstrapCleanupDone
+	unDeleteUserData:
+	!insertmacro DeleteUserBootstrapData
+	unBootstrapCleanupDone:
+	RMDir "$INSTDIR"
 
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}"
+	DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}"
 SectionEnd
-
-Function un.DeleteUserDataIfSelected
-  IntCmp $un.DeleteUserData 1 0 done
-    RMDir /r "$INSTDIR\instances"
-    Delete "$INSTDIR\config.json"
-    Delete "$INSTDIR\accounts.dat"
-    RMDir /r "$INSTDIR\assets"
-done:
-FunctionEnd

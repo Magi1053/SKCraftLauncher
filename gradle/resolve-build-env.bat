@@ -1,18 +1,29 @@
 @echo off
 rem Resolve JDK 17 (required) and optionally NSIS for Windows installer packaging.
-rem Usage: resolve-build-env.bat [--no-installer]
+rem Usage: resolve-build-env.bat [--no-installer|--no-nsis]
 rem   --no-installer  Skip NSIS lookup and set BUILD_INSTALLER=0
+rem   --no-nsis       Skip NSIS lookup only (Linux/mac packaging on Windows host)
 rem Exit code 1 if JDK 17 is not found; 0 otherwise.
 rem Sets JAVA_HOME, BUILD_INSTALLER, and optionally MAKENSIS.
 
 if not defined BUILD_INSTALLER set "BUILD_INSTALLER=1"
-if /i "%~1"=="--no-installer" set "BUILD_INSTALLER=0"
-if /i "%~1"=="no-installer" set "BUILD_INSTALLER=0"
+set "RESOLVE_NSIS=1"
+if /i "%~1"=="--no-installer" (
+    set "BUILD_INSTALLER=0"
+    set "RESOLVE_NSIS=0"
+)
+if /i "%~1"=="no-installer" (
+    set "BUILD_INSTALLER=0"
+    set "RESOLVE_NSIS=0"
+)
+if /i "%~1"=="--no-nsis" set "RESOLVE_NSIS=0"
+if /i "%~1"=="no-nsis" set "RESOLVE_NSIS=0"
 
 call :resolve_java_home
 if errorlevel 1 goto missing_jdk
 
 if "%BUILD_INSTALLER%"=="0" goto skip_installer
+if "%RESOLVE_NSIS%"=="0" goto skip_nsis
 
 call :resolve_nsis
 if errorlevel 1 goto missing_nsis
@@ -34,7 +45,7 @@ echo ====================================================================
 echo.
 echo  JARs and other build outputs will still be produced.
 echo.
-echo  To build SKCraftLauncherSetup.exe, install NSIS 3:
+echo  To build the Windows Setup.exe, install NSIS 3:
 echo    winget install NSIS.NSIS
 echo  Or download from:
 echo    https://nsis.sourceforge.io/Download
@@ -47,6 +58,9 @@ exit /b 0
 
 :skip_installer
 echo Skipping native installer packaging.
+exit /b 0
+
+:skip_nsis
 exit /b 0
 
 :resolve_java_home

@@ -4,12 +4,51 @@ plugins {
     id 'io.freefair.lombok'
 }
 
-ext.installerVersion = project.version.toString().replaceAll('-SNAPSHOT', '')
+def bootstrapProperties = new Properties()
+file('src/main/resources/com/skcraft/launcher/bootstrap.properties').withInputStream {
+    bootstrapProperties.load(it)
+}
 
+def trimAppName = { String value ->
+    def trimmed = value?.trim()
+    trimmed ?: project.name
+}
+
+def sanitizeInstallDirName = { String value ->
+    def sanitized = value.replaceAll(/[^A-Za-z0-9_-]/, '')
+    sanitized ?: project.name
+}
+
+def resolvePackageAppName = { String platformKey ->
+    trimAppName((project.findProperty('appName')
+        ?: bootstrapProperties.getProperty(platformKey)
+        ?: bootstrapProperties.getProperty('packageAppName', project.name)).toString())
+}
+
+ext.installerVersion = project.version.toString().replaceAll('-SNAPSHOT', '')
+ext.packageAppNameWindows = resolvePackageAppName('packageAppNameWindows')
+ext.packageAppNameMac = resolvePackageAppName('packageAppNameMac')
+ext.packageAppNameLinux = resolvePackageAppName('packageAppNameLinux')
+ext.installDirNameWindows = sanitizeInstallDirName((project.findProperty('installDirName') ?: project.ext.packageAppNameWindows).toString())
+ext.installDirNameLinux = sanitizeInstallDirName((project.findProperty('installDirName') ?: project.ext.packageAppNameLinux).toString())
+def installBaseDirOverride = project.findProperty('installBaseDir')
+def configuredInstallBaseDir = installBaseDirOverride ?: bootstrapProperties.getProperty('installBaseDirWindows')
+if (configuredInstallBaseDir == null || configuredInstallBaseDir.toString().trim().isEmpty()) {
+    throw new GradleException('Missing required bootstrap property: installBaseDirWindows')
+}
+ext.installBaseDirWindows = configuredInstallBaseDir.toString().trim()
+
+apply from: rootProject.file('gradle/browser-runtime.gradle')
 apply from: 'installer/assemble-runtime.gradle'
 
 application {
     mainClass = "com.skcraft.launcher.Bootstrap"
+}
+
+tasks.named('run', JavaExec) {
+    if (installBaseDirOverride != null) {
+        systemProperty 'com.skcraft.launcher.installBaseDir', installBaseDirOverride.toString().trim()
+    }
 }
 
 dependencies {
@@ -17,18 +56,19 @@ dependencies {
     implementation 'javax.xml.bind:jaxb-api:2.3.1'
 }
 
+
 processResources {
-    filesMatching('**/*.properties') {
-        filter {
-            it.replace('${project.version}', project.version)
-        }
+    dependsOn ':launcher:processResources'
+
+    from(project(':launcher').layout.buildDirectory.dir('resources/main')) {
+        include 'com/skcraft/launcher/launcher.properties'
     }
 }
 
 tasks.register('packageWindows', JavaExec) {
     group = 'distribution'
     description = 'Build Windows Setup.exe (NSIS) via Java packager.'
-    dependsOn tasks.named('createWindowsLauncher')
+    dependsOn tasks.named('createWindowsLauncher'), tasks.named('downloadWebView2Bootstrapper')
 
     doFirst {
         if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
@@ -38,7 +78,12 @@ tasks.register('packageWindows', JavaExec) {
 
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
-    args 'windows', projectDir.absolutePath, project.installerVersion
+    args 'windows',
+            projectDir.absolutePath,
+            project.ext.installerVersion,
+            project.ext.packageAppNameWindows,
+            project.ext.installDirNameWindows,
+            project.ext.installBaseDirWindows
 }
 
 tasks.register('packageLinux', JavaExec) {
@@ -54,12 +99,19 @@ tasks.register('packageLinux', JavaExec) {
 
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
-    args 'linux', projectDir.absolutePath, project.installerVersion, (project.findProperty('buildDeb') ?: 'false').toString()
+    args 'linux',
+            projectDir.absolutePath,
+            project.ext.installerVersion,
+            (findProperty('buildDeb') ?: 'false').toString(),
+            project.ext.packageAppNameLinux,
+            project.ext.installDirNameLinux.toLowerCase(Locale.ROOT)
 }
 
 tasks.register('packageLinuxWsl', JavaExec) {
     group = 'distribution'
     description = 'Build Linux AppImage, tar.gz, and optional DEB from Windows via WSL using Java packager.'
+    dependsOn tasks.named('shadowJar'), project(':launcher').tasks.named('shadowJar')
+    mustRunAfter tasks.named('packageWindows')
 
     doFirst {
         if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
@@ -71,14 +123,33 @@ tasks.register('packageLinuxWsl', JavaExec) {
     mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
     args 'wsl-linux',
             rootProject.projectDir.absolutePath,
-            project.installerVersion,
-            (project.findProperty('buildDeb') ?: 'false').toString(),
-            (project.findProperty('wslDistro') ?: '').toString()
+            project.ext.installerVersion,
+            (findProperty('buildDeb') ?: 'false').toString(),
+            project.ext.packageAppNameLinux,
+            project.ext.installDirNameLinux.toLowerCase(Locale.ROOT),
+            (findProperty('wslDistro') ?: '').toString()
+}
+
+tasks.register('packageLinuxDocker', JavaExec) {
+    group = 'distribution'
+    description = 'Build Linux AppImage, tar.gz, and optional DEB via Docker using Java packager.'
+    dependsOn tasks.named('shadowJar'), project(':launcher').tasks.named('shadowJar')
+    mustRunAfter tasks.named('packageWindows')
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
+    args 'docker-linux',
+            rootProject.projectDir.absolutePath,
+            project.ext.installerVersion,
+            (findProperty('buildDeb') ?: 'false').toString(),
+            project.ext.packageAppNameLinux,
+            project.ext.installDirNameLinux.toLowerCase(Locale.ROOT),
+            (findProperty('dockerImage') ?: '').toString()
 }
 
 tasks.register('packageMac', JavaExec) {
     group = 'distribution'
-    description = 'Build macOS DMG and tarball via Java packager.'
+    description = 'Build macOS DMG, PKG, and tarball via Java packager.'
     dependsOn tasks.named('assembleAppImage')
 
     doFirst {
@@ -89,7 +160,10 @@ tasks.register('packageMac', JavaExec) {
 
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
-    args 'mac', projectDir.absolutePath, project.installerVersion
+    args 'mac',
+            projectDir.absolutePath,
+            project.ext.installerVersion,
+            project.ext.packageAppNameMac
 }
 
 tasks.register('package') {

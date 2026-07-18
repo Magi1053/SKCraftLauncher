@@ -33,6 +33,18 @@ public final class SwingHelper {
     private SwingHelper() {
     }
 
+    private static Font getDetailsTextFont() {
+        Font baseFont = UIManager.getFont("TextArea.font");
+        if (baseFont == null) {
+            baseFont = UIManager.getFont("Label.font");
+        }
+        if (baseFont == null) {
+            return new Font(Font.MONOSPACED, Font.PLAIN, 12);
+        }
+        return new Font(Font.MONOSPACED, Font.PLAIN, baseFont.getSize())
+                .deriveFont(Math.max(11f, baseFont.getSize2D() - 1f));
+    }
+
     public static String htmlEscape(String str) {
         return str.replace(">", "&gt;")
                 .replace("<", "&lt;")
@@ -116,10 +128,10 @@ public final class SwingHelper {
             if (detailsText != null) {
                 JTextArea textArea = new JTextArea(tr("errorDialog.reportError") + "\n\n" + detailsText);
                 JLabel tempLabel = new JLabel();
-                textArea.setFont(tempLabel.getFont());
+                textArea.setFont(getDetailsTextFont());
                 textArea.setBackground(tempLabel.getBackground());
                 textArea.setTabSize(2);
-                textArea.setEditable(false);;
+                textArea.setEditable(false);
 
                 JScrollPane scrollPane = new JScrollPane(textArea);
                 scrollPane.setPreferredSize(new Dimension(350, 120));

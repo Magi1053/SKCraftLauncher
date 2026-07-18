@@ -26,6 +26,7 @@ import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.HttpRequest;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SimpleLogFormatter;
+import com.skcraft.launcher.util.WindowsAppIdentity;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -464,6 +465,7 @@ public final class Launcher {
         if (BrowserBootstrap.prepare(args)) {
             return;
         }
+        WindowsAppIdentity.applyIfPresent();
         BrowserBootstrap.configureSwing();
 
         SwingUtilities.invokeLater(new Runnable() {
