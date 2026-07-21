@@ -28,6 +28,8 @@ public class Configuration {
     private boolean offlineEnabled = false;
     private int windowWidth = 854;
     private int windowHeight = 480;
+    private boolean maximizeWindow = true;
+    private boolean showInstanceConsole = false;
     private boolean darkTheme = false;
     private String themeMode;
     private boolean proxyEnabled = false;

@@ -10,6 +10,7 @@ import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.swing.LinedBoxPanel;
 import com.skcraft.launcher.swing.MessageLog;
 import com.skcraft.launcher.swing.SwingHelper;
+import com.skcraft.launcher.util.LogBuffer;
 import com.skcraft.launcher.util.PastebinPoster;
 import com.skcraft.launcher.util.SharedLocale;
 import lombok.Getter;
@@ -46,7 +47,11 @@ public class ConsoleFrame extends JFrame {
      * @param colorEnabled true to enable a colored console
      */
     public ConsoleFrame(int numLines, boolean colorEnabled) {
-        this(SharedLocale.tr("console.title"), numLines, colorEnabled);
+        this(SharedLocale.tr("console.title"), numLines, colorEnabled, true);
+    }
+
+    public ConsoleFrame(int numLines, boolean colorEnabled, boolean lineWrap) {
+        this(SharedLocale.tr("console.title"), numLines, colorEnabled, lineWrap);
     }
 
     /**
@@ -57,7 +62,15 @@ public class ConsoleFrame extends JFrame {
      * @param colorEnabled true to enable a colored console
      */
     public ConsoleFrame(@NonNull String title, int numLines, boolean colorEnabled) {
-        messageLog = new MessageLog(numLines, colorEnabled);
+        this(title, numLines, colorEnabled, true);
+    }
+
+    public ConsoleFrame(@NonNull String title, int numLines, boolean colorEnabled, boolean lineWrap) {
+        this(title, new MessageLog(numLines, colorEnabled, lineWrap));
+    }
+
+    protected ConsoleFrame(@NonNull String title, @NonNull MessageLog messageLog) {
+        this.messageLog = messageLog;
         trayRunningIcon = SwingHelper.createImage(Launcher.class, "tray_ok.png");
         trayClosedIcon = SwingHelper.createImage(Launcher.class, "tray_closed.png");
 
@@ -95,6 +108,9 @@ public class ConsoleFrame extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 messageLog.clear();
+                if (globalFrame == ConsoleFrame.this) {
+                    LogBuffer.clearBuffer();
+                }
             }
         });
 
@@ -123,6 +139,9 @@ public class ConsoleFrame extends JFrame {
         messageLog.detachGlobalHandler();
         messageLog.clear();
         registeredGlobalLog = false;
+        if (globalFrame == this) {
+            globalFrame = null;
+        }
         dispose();
     }
 
@@ -150,7 +169,7 @@ public class ConsoleFrame extends JFrame {
 
     public static void showMessages() {
         ConsoleFrame frame = globalFrame;
-        if (frame == null) {
+        if (frame == null || !frame.isDisplayable()) {
             frame = new ConsoleFrame(10000, false);
             globalFrame = frame;
             frame.setTitle(SharedLocale.tr("console.launcherConsoleTitle"));

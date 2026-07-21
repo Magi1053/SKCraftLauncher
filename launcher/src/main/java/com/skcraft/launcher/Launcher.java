@@ -24,6 +24,7 @@ import com.skcraft.launcher.update.UpdateManager;
 import com.skcraft.launcher.update.runtime.JavaRuntimeManager;
 import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.HttpRequest;
+import com.skcraft.launcher.util.LogBuffer;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SimpleLogFormatter;
 import com.skcraft.launcher.util.WindowsAppIdentity;
@@ -453,6 +454,7 @@ public final class Launcher {
      */
     public static void setupLogger() {
         SimpleLogFormatter.configureGlobalLogger();
+        LogBuffer.init();
     }
 
     /**

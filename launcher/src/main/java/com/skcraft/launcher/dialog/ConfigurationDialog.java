@@ -39,6 +39,7 @@ public class ConfigurationDialog extends JDialog {
     private final FormPanel gameSettingsPanel = new FormPanel();
     private final JSpinner widthSpinner = new JSpinner();
     private final JSpinner heightSpinner = new JSpinner();
+    private final JCheckBox maximizeWindowCheck = new JCheckBox(SharedLocale.tr("options.maximizeWindow"));
     private final FormPanel proxySettingsPanel = new FormPanel();
     private final JCheckBox useProxyCheck = new JCheckBox(SharedLocale.tr("options.useProxyCheck"));
     private final JTextField proxyHostText = new JTextField();
@@ -46,6 +47,7 @@ public class ConfigurationDialog extends JDialog {
     private final JTextField proxyUsernameText = new JTextField();
     private final JPasswordField proxyPasswordText = new JPasswordField();
     private final FormPanel advancedPanel = new FormPanel();
+    private final JCheckBox showInstanceConsoleCheck = new JCheckBox(SharedLocale.tr("options.showInstanceConsole"));
     private final JComboBox<String> themeSelect = new JComboBox<>(new String[] {
             SharedLocale.tr("options.themeLight"),
             SharedLocale.tr("options.themeDark"),
@@ -81,14 +83,18 @@ public class ConfigurationDialog extends JDialog {
 
         mapper.map(widthSpinner, "windowWidth");
         mapper.map(heightSpinner, "windowHeight");
+        mapper.map(maximizeWindowCheck, "maximizeWindow");
         mapper.map(useProxyCheck, "proxyEnabled");
         mapper.map(proxyHostText, "proxyHost");
         mapper.map(proxyPortText, "proxyPort");
         mapper.map(proxyUsernameText, "proxyUsername");
         mapper.map(proxyPasswordText, "proxyPassword");
+        mapper.map(showInstanceConsoleCheck, "showInstanceConsole");
         mapper.map(gameKeyText, "gameKey");
 
         mapper.copyFromObject();
+        updateWindowSizeInputState();
+        maximizeWindowCheck.addActionListener(e -> updateWindowSizeInputState());
         themeSelect.setSelectedIndex(indexForThemeMode(config.getThemeMode()));
     }
 
@@ -100,6 +106,7 @@ public class ConfigurationDialog extends JDialog {
         instanceSettingsScroll.getViewport().setOpaque(false);
         tabbedPane.addTab(SharedLocale.tr("options.instancesTab"), instanceSettingsScroll);
 
+        gameSettingsPanel.addRow(maximizeWindowCheck);
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowWidth")), widthSpinner);
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowHeight")), heightSpinner);
         tabbedPane.addTab(SharedLocale.tr("options.minecraftTab"), SwingHelper.alignTabbedPane(gameSettingsPanel));
@@ -111,6 +118,7 @@ public class ConfigurationDialog extends JDialog {
         proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyPassword")), proxyPasswordText);
         tabbedPane.addTab(SharedLocale.tr("options.proxyTab"), SwingHelper.alignTabbedPane(proxySettingsPanel));
 
+        advancedPanel.addRow(showInstanceConsoleCheck);
         advancedPanel.addRow(new JLabel(SharedLocale.tr("options.theme")), themeSelect);
         advancedPanel.addRow(new JLabel(SharedLocale.tr("options.gameKey")), gameKeyText);
         tabbedPane.addTab(SharedLocale.tr("options.advancedTab"), SwingHelper.alignTabbedPane(advancedPanel));
@@ -231,6 +239,12 @@ public class ConfigurationDialog extends JDialog {
     /**
      * Save the configuration and close the dialog.
      */
+    private void updateWindowSizeInputState() {
+        boolean enabled = !maximizeWindowCheck.isSelected();
+        widthSpinner.setEnabled(enabled);
+        heightSpinner.setEnabled(enabled);
+    }
+
     public void save() {
         mapper.copyFromSwing();
         config.setThemeMode(themeModeForIndex(themeSelect.getSelectedIndex()));

@@ -10,7 +10,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import com.skcraft.concurrency.ObservableFuture;
+import com.skcraft.concurrency.ProgressObservable;
 import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.auth.Session;
@@ -41,6 +43,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.logging.Level;
 
@@ -213,34 +216,52 @@ public class LaunchSupervisor {
     private void launch(Window window, Instance instance, Session session, final LaunchListener listener) {
         final File extractDir = launcher.createExtractDir();
 
-        // Get the process
         Runner task = new Runner(launcher, instance, session, extractDir, new MemoryVerifier(instance));
         ObservableFuture<Process> processFuture = new ObservableFuture<Process>(
                 launcher.getExecutor().submit(task), task);
 
-        // Show process for the process retrieval
-        ProgressDialog.showProgress(
-                window, processFuture, SharedLocale.tr("launcher.launchingTItle"), tr("launcher.launchingStatus", instance.getTitle()));
+        // Completes when the game window is up (or launch failed) — keeps one ProgressDialog open.
+        final SettableFuture<Process> readyFuture = SettableFuture.create();
+        final AtomicBoolean gameStarted = new AtomicBoolean(false);
 
-        // If the process is started, get rid of this window
         Futures.addCallback(processFuture, new FutureCallback<Process>() {
             @Override
             public void onSuccess(Process result) {
-                SwingUtilities.invokeLater(listener::gameStarted);
             }
 
             @Override
             public void onFailure(Throwable t) {
+                readyFuture.setException(t);
             }
         });
+        readyFuture.addListener(() -> {
+            if (readyFuture.isCancelled()) {
+                processFuture.cancel(true);
+            }
+        }, sameThreadExecutor());
 
-        // Watch the created process
-        ListenableFuture<ProcessConsoleFrame> future = Futures.transform(
-                processFuture, new LaunchProcessHandler(launcher), launcher.getExecutor());
-        SwingHelper.addErrorDialogCallback(null, future);
+        ProgressObservable launchProgress = new ProgressObservable() {
+            @Override
+            public double getProgress() {
+                return processFuture.isDone() ? -1 : processFuture.getProgress();
+            }
 
-        // Clean up at the very end
-        future.addListener(() -> {
+            @Override
+            public String getStatus() {
+                return processFuture.isDone()
+                        ? tr("launcher.launchingStatus", instance.getTitle())
+                        : processFuture.getStatus();
+            }
+        };
+
+        // Register before showProgress — that call blocks the EDT until readyFuture completes.
+        ListenableFuture<ProcessConsoleFrame> lifeFuture = Futures.transform(
+                processFuture,
+                new LaunchProcessHandler(launcher, instance, listener, gameStarted, readyFuture),
+                launcher.getExecutor());
+        SwingHelper.addErrorDialogCallback(null, lifeFuture);
+
+        lifeFuture.addListener(() -> {
             try {
                 log.info("Process ended; cleaning up " + extractDir.getAbsolutePath());
                 FileUtils.deleteDirectory(extractDir);
@@ -249,23 +270,28 @@ public class LaunchSupervisor {
             }
         }, sameThreadExecutor());
 
-        // Hook up launch listener
-        Futures.addCallback(future, new FutureCallback<ProcessConsoleFrame>() {
+        Futures.addCallback(lifeFuture, new FutureCallback<ProcessConsoleFrame>() {
             @Override
             public void onSuccess(@Nullable ProcessConsoleFrame result) {
-                // gameStarted was only invoked on success above, so only call gameClosed on success
-                listener.gameClosed();
+                if (gameStarted.get()) {
+                    listener.gameClosed();
+                }
             }
 
             @Override
             public void onFailure(Throwable t) {
-                // likely user cancellation
                 if (!(t instanceof CancellationException)) {
                     log.info("Process failure: " + t.getLocalizedMessage());
                 }
             }
         }, SwingExecutor.INSTANCE);
+
+        ProgressDialog.showProgress(
+                window, readyFuture, launchProgress,
+                SharedLocale.tr("launcher.launchingTItle"),
+                tr("launcher.launchingStatus", instance.getTitle()));
     }
+
 
     @RequiredArgsConstructor
     static class MemoryVerifier implements BiFunction<Integer, Integer, Runner.MemoryVerificationResult> {
