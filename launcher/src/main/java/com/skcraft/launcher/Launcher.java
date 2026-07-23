@@ -101,6 +101,11 @@ public final class Launcher {
         this.config = Persistence.load(new File(configDir, "config.json"), Configuration.class);
         this.accounts = Persistence.load(new File(configDir, "accounts.dat"), AccountList.class);
 
+        // Ensure an active account is selected for older account lists.
+        if (this.accounts.migrateActiveAccount()) {
+            Persistence.commitAndForget(this.accounts);
+        }
+
         executor.submit(new Runnable() {
             @Override
             public void run() {
@@ -150,7 +155,9 @@ public final class Launcher {
     }
 
     public LoginService getLoginService(UserType type) {
-        if (type == UserType.MICROSOFT) {
+        if (type == UserType.OFFLINE) {
+            return new OfflineLoginService();
+        } else if (type == UserType.MICROSOFT) {
             return getMicrosoftLogin();
         } else {
             return getYggdrasil();

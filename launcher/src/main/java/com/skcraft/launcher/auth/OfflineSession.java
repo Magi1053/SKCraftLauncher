@@ -9,6 +9,7 @@ package com.skcraft.launcher.auth;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +23,7 @@ public class OfflineSession implements Session {
 
     @Getter
     private final String name;
+    private final String uuid;
 
     /**
      * Create a new offline session using the given player name.
@@ -30,11 +32,25 @@ public class OfflineSession implements Session {
      */
     public OfflineSession(@NonNull String name) {
         this.name = name;
+        this.uuid = getOfflineUuid(name);
+    }
+
+    /**
+     * Restore an offline session from disk.
+     * Always re-derives the offline UUID from the username and never carries
+     * avatar/texture data, so the game cannot resolve a Mojang/custom skin.
+     */
+    public static OfflineSession fromSavedSession(@NonNull SavedSession session) {
+        return new OfflineSession(session.getUsername());
+    }
+
+    public static String getOfflineUuid(@NonNull String name) {
+        return UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     @Override
     public String getUuid() {
-        return (new UUID(0, 0)).toString();
+        return uuid;
     }
 
     @Override
@@ -54,7 +70,7 @@ public class OfflineSession implements Session {
 
     @Override
     public UserType getUserType() {
-        return UserType.LEGACY;
+        return UserType.OFFLINE;
     }
 
     @Override
@@ -65,6 +81,16 @@ public class OfflineSession implements Session {
     @Override
     public boolean isOnline() {
         return false;
+    }
+
+    @Override
+    public SavedSession toSavedSession() {
+        SavedSession savedSession = new SavedSession();
+        savedSession.setType(UserType.OFFLINE);
+        savedSession.setUsername(name);
+        savedSession.setUuid(uuid);
+        // No access/refresh tokens or avatar — offline play uses Steve/Alex only.
+        return savedSession;
     }
 
 }

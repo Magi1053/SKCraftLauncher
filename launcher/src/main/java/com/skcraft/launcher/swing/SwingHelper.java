@@ -403,20 +403,36 @@ public final class SwingHelper {
                     return;
                 }
 
+                // Prefer the human-readable launcher error; skip wrapper stacks (Futures, etc.).
+                LauncherException launcherException = findLauncherException(t);
                 String message;
-                if (t instanceof LauncherException) {
-                    message = t.getLocalizedMessage();
-                    t = t.getCause();
+                Throwable details;
+                if (launcherException != null) {
+                    message = launcherException.getLocalizedMessage();
+                    details = launcherException.getCause();
                 } else {
                     message = t.getLocalizedMessage();
                     if (message == null) {
                         message = SharedLocale.tr("errors.genericError");
                     }
+                    details = t;
                 }
                 log.log(Level.WARNING, "Task failed", t);
-                SwingHelper.showErrorDialog(owner, message, SharedLocale.tr("errorTitle"), t);
+                SwingHelper.showErrorDialog(owner, message, SharedLocale.tr("errorTitle"), details);
             }
         }, SwingExecutor.INSTANCE);
+    }
+
+    private static LauncherException findLauncherException(Throwable t) {
+        for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+            if (cur instanceof LauncherException) {
+                return (LauncherException) cur;
+            }
+            if (cur.getCause() == cur) {
+                break;
+            }
+        }
+        return null;
     }
 
     public static Component alignTabbedPane(Component component) {

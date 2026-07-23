@@ -14,14 +14,18 @@ public class MinecraftServicesAuthorizer {
 	private static final URL MC_SERVICES_LOGIN = url("https://api.minecraftservices.com/authentication/login_with_xbox");
 	private static final URL MC_SERVICES_PROFILE = url("https://api.minecraftservices.com/minecraft/profile");
 
-	public static McAuthResponse authorizeWithMinecraft(XboxAuthorization auth) throws IOException, InterruptedException {
+	public static McAuthResponse authorizeWithMinecraft(XboxAuthorization auth) throws IOException, InterruptedException, AuthenticationException {
 		McAuthRequest request = new McAuthRequest("XBL3.0 x=" + auth.getCombinedToken());
 
 		return HttpRequest.post(MC_SERVICES_LOGIN)
 				.bodyJson(request)
 				.header("Accept", "application/json")
 				.execute()
-				.expectResponseCode(200)
+				.expectResponseCodeOr(200, req -> {
+					int responseCode = req.getResponseCode();
+					return new AuthenticationException("Minecraft services login failed with HTTP " + responseCode,
+							SharedLocale.tr("login.minecraft.error", "HTTP " + responseCode));
+				})
 				.returnContent()
 				.asJson(McAuthResponse.class);
 	}
@@ -37,21 +41,32 @@ public class MinecraftServicesAuthorizer {
 				.header("Authorization", authorization)
 				.execute()
 				.expectResponseCodeOr(200, req -> {
+					int responseCode = req.getResponseCode();
 					HttpRequest.BufferedResponse content = req.returnContent();
 					if (content.asBytes().length == 0) {
+						if (responseCode == 404) {
+							return new AuthenticationException("No Minecraft profile",
+									SharedLocale.tr("login.minecraftNotOwnedError"));
+						}
 						return new AuthenticationException("Got empty response from Minecraft services",
-								SharedLocale.tr("login.minecraft.error", req.getResponseCode()));
+								SharedLocale.tr("login.minecraft.error", responseCode));
 					}
 
 					McServicesError error = content.asJson(McServicesError.class);
+					String errorCode = error.getErrorCode();
 
-					if (error.getError().equals("NOT_FOUND")) {
+					if (responseCode == 404 || "NOT_FOUND".equals(errorCode)) {
 						return new AuthenticationException("No Minecraft profile",
 								SharedLocale.tr("login.minecraftNotOwnedError"));
 					}
 
-					return new AuthenticationException(error.getErrorMessage(),
-							SharedLocale.tr("login.minecraft.error", error.getErrorMessage()));
+					String detail = error.getErrorMessage();
+					if (detail == null || detail.isEmpty()) {
+						detail = errorCode != null ? errorCode : ("HTTP " + responseCode);
+					}
+
+					return new AuthenticationException(detail,
+							SharedLocale.tr("login.minecraft.error", detail));
 				})
 				.returnContent()
 				.asJson(McProfileResponse.class);

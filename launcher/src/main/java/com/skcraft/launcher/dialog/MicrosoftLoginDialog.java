@@ -13,6 +13,7 @@ import com.skcraft.concurrency.SettableProgress;
 import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.auth.MicrosoftLoginService;
 import com.skcraft.launcher.auth.Session;
+import com.skcraft.launcher.swing.LinkButton;
 import com.skcraft.launcher.swing.SwingHelper;
 import com.skcraft.launcher.util.QrCodes;
 import com.skcraft.launcher.util.SharedLocale;
@@ -36,12 +37,12 @@ import java.util.function.Consumer;
 import static com.skcraft.launcher.util.SharedLocale.tr;
 
 /**
- * Modal dialog driving the Microsoft device-code sign in flow.
+ * Modal dialog for Microsoft sign-in.
  *
  * <p>
- * Fetches a device code, presents step-by-step instructions, polls for
- * completion,
- * and surfaces a fallback path for the redirect-based browser flow.
+ * Offers browser-redirect sign-in as the primary action, plus a device-code
+ * path (QR + code) for mobile or alternate devices. Polls until the device-code
+ * flow completes, or returns a fallback request for redirect auth.
  * </p>
  */
 public class MicrosoftLoginDialog extends JDialog {
@@ -56,8 +57,8 @@ public class MicrosoftLoginDialog extends JDialog {
 	private final Launcher launcher;
 	private final MicrosoftLoginService.DeviceCodeDetails details;
 	private final String authUrl;
+	private final String verificationUri;
 
-	private final JButton openBrowserButton = new JButton(tr("login.microsoft.device.openBrowser"));
 	private final JButton copyCodeButton = createCopyIconButton();
 	private final JButton fallbackButton = new JButton(tr("login.microsoft.device.useBrowserFallback"));
 	private final JButton cancelButton = new JButton(tr("button.cancel"));
@@ -67,10 +68,7 @@ public class MicrosoftLoginDialog extends JDialog {
 	private final JLabel qrLabel = new JLabel();
 	private final QrSpinnerPanel qrSpinnerPanel = new QrSpinnerPanel(QR_SIZE);
 	private final JPanel qrContentPanel = new JPanel(new CardLayout());
-	private JPanel qrOptionPanel;
-	private final JLabel qrHintLabel = new JLabel(tr("login.microsoft.device.qrHint"));
-	private final JLabel browserHintLabel = new JLabel();
-	private final JSeparator optionDivider = new JSeparator(SwingConstants.VERTICAL);
+	private JPanel qrColumn;
 	private final JProgressBar pollIndicator = new JProgressBar();
 
 	private final Timer countdownTimer;
@@ -79,7 +77,6 @@ public class MicrosoftLoginDialog extends JDialog {
 
 	@Getter
 	private Outcome outcome = Outcome.cancelled();
-	private boolean alreadyOpenedBrowser;
 	private boolean codeExpired;
 
 	private MicrosoftLoginDialog(Window owner, Launcher launcher, MicrosoftLoginService.DeviceCodeDetails details) {
@@ -89,6 +86,9 @@ public class MicrosoftLoginDialog extends JDialog {
 		this.authUrl = details.getVerificationUriComplete() != null
 				? details.getVerificationUriComplete()
 				: details.getVerificationUri();
+		this.verificationUri = details.getVerificationUri() != null
+				? details.getVerificationUri()
+				: authUrl;
 		this.codeField = new JTextField(details.getUserCode());
 		this.countdownTimer = new Timer(1000, ev -> updateCountdown());
 		this.countdownTimer.setInitialDelay(0);
@@ -132,30 +132,15 @@ public class MicrosoftLoginDialog extends JDialog {
 		subtitleLabel.setForeground(SwingHelper.uiColor("Label.disabledForeground", Color.DARK_GRAY));
 
 		content.add(titleLabel, "gapbottom 2");
-		content.add(subtitleLabel, "gapbottom 14");
-		content.add(new JSeparator(), "growx, gapbottom 14");
+		content.add(subtitleLabel, "gapbottom 16");
 
-		content.add(buildStepLabel(1, tr("login.microsoft.device.step1")), "gapbottom 8");
-		content.add(buildOptionsPanel(), "growx, gapbottom 18");
+		fallbackButton.setFont(fallbackButton.getFont().deriveFont(Font.BOLD, fallbackButton.getFont().getSize2D() + 1f));
+		fallbackButton.setMargin(new Insets(12, 18, 12, 18));
+		fallbackButton.putClientProperty("FlatLaf.styleClass", "primary");
+		content.add(fallbackButton, "growx, hmin 44, gapbottom 16");
 
-		content.add(buildStepLabel(2, tr("login.microsoft.device.step2")), "gapbottom 6");
-
-		codeField.setEditable(false);
-		codeField.setHorizontalAlignment(SwingConstants.CENTER);
-		codeField.setFont(new Font(Font.MONOSPACED, Font.BOLD, CODE_FIELD_FONT_SIZE));
-		codeField.setBorder(new EmptyBorder(10, 16, 10, 8));
-
-		Color codeBorderColor = SwingHelper.uiColor("Component.borderColor", new Color(160, 160, 160));
-		JPanel codeBox = new JPanel(new BorderLayout(0, 0));
-		Color codeBackground = codeField.getBackground();
-		codeBox.setBackground(codeBackground);
-		codeBox.setBorder(BorderFactory.createLineBorder(codeBorderColor));
-		copyCodeButton.setBackground(codeBackground);
-		codeBox.add(codeField, BorderLayout.CENTER);
-		codeBox.add(copyCodeButton, BorderLayout.EAST);
-		content.add(codeBox, "growx, gapbottom 14");
-
-		content.add(new JSeparator(), "growx, gapbottom 12");
+		content.add(buildOrDivider(tr("login.microsoft.device.deviceHint")), "growx, gapbottom 16");
+		content.add(buildDeviceCodePanel(), "alignx center, gapbottom 14");
 
 		pollIndicator.setIndeterminate(true);
 		pollIndicator.setPreferredSize(new Dimension(18, 18));
@@ -168,59 +153,94 @@ public class MicrosoftLoginDialog extends JDialog {
 		statusRow.add(countdownLabel, "");
 		content.add(statusRow, "growx");
 
-		JPanel buttonBar = new JPanel(new MigLayout("insets 12 22 16 22, fillx", "[]push[]"));
-		buttonBar.add(fallbackButton);
+		JPanel buttonBar = new JPanel(new MigLayout("insets 12 22 16 22, fillx", "[push][]"));
 		buttonBar.add(cancelButton, "tag cancel");
 
 		setLayout(new BorderLayout());
 		add(content, BorderLayout.CENTER);
 		add(buttonBar, BorderLayout.SOUTH);
 
-		SwingHelper.styleDialogButton(openBrowserButton);
 		SwingHelper.styleDialogButton(copyCodeButton);
 		SwingHelper.styleDialogButton(fallbackButton);
 		SwingHelper.styleDialogButton(cancelButton);
-		SwingHelper.alignButtonSizes(fallbackButton, cancelButton);
 
-		openBrowserButton.addActionListener(ev -> handleOpenBrowser());
 		copyCodeButton.addActionListener(ev -> handleCopy());
-		fallbackButton.setToolTipText(tr("login.microsoft.device.fallbackTooltip"));
 		fallbackButton.addActionListener(ev -> handleFallback());
 		cancelButton.addActionListener(ev -> handleCancel());
 
-		getRootPane().setDefaultButton(openBrowserButton);
+		getRootPane().setDefaultButton(fallbackButton);
 		getRootPane().registerKeyboardAction(ev -> handleCancel(),
 				KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
 				JComponent.WHEN_IN_FOCUSED_WINDOW);
 	}
 
-	private JLabel buildStepLabel(int number, String instruction) {
-		String html = String.format("<html><b>%s</b> &nbsp;%s</html>",
-				SwingHelper.htmlEscape(tr("login.microsoft.device.stepLabel", number)),
-				SwingHelper.htmlEscape(instruction));
-		return new JLabel(html);
+	private JPanel buildOrDivider(String text) {
+		Color mutedColor = SwingHelper.uiColor("Label.disabledForeground", Color.DARK_GRAY);
+		JLabel label = new JLabel(text);
+		label.setForeground(mutedColor);
+
+		JPanel panel = new JPanel(new MigLayout("insets 0, fillx, gap 10", "[grow][][grow]"));
+		panel.add(new JSeparator(), "growx");
+		panel.add(label, "");
+		panel.add(new JSeparator(), "growx");
+		return panel;
 	}
 
-	private JPanel buildOptionsPanel() {
+	private JPanel buildDeviceCodePanel() {
 		Color mutedColor = SwingHelper.uiColor("Label.disabledForeground", Color.DARK_GRAY);
 
-		openBrowserButton.setFont(openBrowserButton.getFont().deriveFont(Font.BOLD));
-		openBrowserButton.setMargin(new Insets(8, 18, 8, 18));
+		codeField.setEditable(false);
+		codeField.setHorizontalAlignment(SwingConstants.CENTER);
+		codeField.setFont(new Font(Font.MONOSPACED, Font.BOLD, CODE_FIELD_FONT_SIZE));
+		codeField.setColumns(Math.max(8, details.getUserCode().length() + 1));
+		codeField.setBorder(new EmptyBorder(10, 16, 10, 8));
+		Color codeBorderColor = SwingHelper.uiColor("Component.borderColor", new Color(160, 160, 160));
+		Color codeBackground = SwingHelper.uiColor("TextField.background", Color.WHITE);
+		codeField.setBackground(codeBackground);
+		JPanel codeBox = new JPanel(new BorderLayout(0, 0));
+		codeBox.setBackground(codeBackground);
+		codeBox.setBorder(BorderFactory.createLineBorder(codeBorderColor));
+		copyCodeButton.setBackground(codeBackground);
+		codeBox.add(codeField, BorderLayout.CENTER);
+		codeBox.add(copyCodeButton, BorderLayout.EAST);
 
-		String verificationUri = details.getVerificationUri() != null ? details.getVerificationUri() : authUrl;
-		browserHintLabel.setText(String.format("<html><div style='text-align:center'>%s</div></html>",
-				SwingHelper.htmlEscape(tr("login.microsoft.device.browserHint", verificationUri))));
-		browserHintLabel.setForeground(mutedColor);
-		browserHintLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		JLabel prefix = new JLabel(tr("login.microsoft.device.browserHintPrefix"));
+		prefix.setForeground(mutedColor);
 
-		int columnWidth = 220;
-		JPanel browserOption = new JPanel(new MigLayout("insets 0, wrap 1", "[center, " + columnWidth + "!]",
-				"[top]8[top]"));
-		browserOption.add(openBrowserButton, "wmin 180, hmin 38");
-		browserOption.add(browserHintLabel, "growx");
+		String linkText = verificationUri != null ? verificationUri : "";
+		LinkButton link = new LinkButton(linkText);
+		link.setFont(prefix.getFont());
+		link.addActionListener(ev -> {
+			if (verificationUri != null && !verificationUri.isEmpty()) {
+				SwingHelper.openURL(verificationUri, this);
+			}
+		});
 
-		qrHintLabel.setForeground(mutedColor);
-		qrHintLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		JPanel openRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
+		openRow.setOpaque(false);
+		openRow.add(prefix);
+		openRow.add(link);
+
+		int rightWidth = Math.max(openRow.getPreferredSize().width, codeBox.getPreferredSize().width);
+
+		JTextArea suffix = new JTextArea(tr("login.microsoft.device.browserHintSuffix"));
+		suffix.setEditable(false);
+		suffix.setFocusable(false);
+		suffix.setOpaque(false);
+		suffix.setBorder(null);
+		suffix.setLineWrap(true);
+		suffix.setWrapStyleWord(true);
+		suffix.setFont(prefix.getFont());
+		suffix.setForeground(mutedColor);
+
+		JPanel instructions = new JPanel(new MigLayout("insets 0, wrap 1, gapy 2", "[" + rightWidth + "!]"));
+		instructions.add(openRow, "growx");
+		instructions.add(suffix, "growx, w " + rightWidth + "!");
+
+		JPanel right = new JPanel(new MigLayout("insets 0, wrap 1, gapy 10", "[" + rightWidth + "!]"));
+		right.add(instructions, "growx");
+		right.add(codeBox, "alignx left");
+
 		qrLabel.setHorizontalAlignment(SwingConstants.CENTER);
 		qrLabel.setVerticalAlignment(SwingConstants.CENTER);
 		qrLabel.setOpaque(true);
@@ -230,19 +250,14 @@ public class MicrosoftLoginDialog extends JDialog {
 		qrContentPanel.add(qrSpinnerPanel, "spinner");
 		qrContentPanel.add(qrLabel, "qr");
 
-		qrOptionPanel = new JPanel(new MigLayout("insets 0, wrap 1", "[center]", "[" + QR_SIZE + "!]10[top]"));
-		qrOptionPanel.add(qrContentPanel, "w " + QR_SIZE + "!, h " + QR_SIZE + "!");
-		qrOptionPanel.add(qrHintLabel, "growx");
+		qrColumn = new JPanel(new MigLayout("insets 0", "[" + QR_SIZE + "!]", "[" + QR_SIZE + "!]"));
+		qrColumn.add(qrContentPanel, "w " + QR_SIZE + "!, h " + QR_SIZE + "!");
+		qrColumn.setVisible(authUrl != null && !authUrl.isEmpty());
 
-		boolean qrExpected = authUrl != null && !authUrl.isEmpty();
-		qrOptionPanel.setVisible(qrExpected);
-		optionDivider.setVisible(qrExpected);
-
-		JPanel options = new JPanel(new MigLayout("insets 0", "[center]20[]20[center]", "[center]"));
-		options.add(browserOption, "aligny center");
-		options.add(optionDivider, "growy, w 1!");
-		options.add(qrOptionPanel, "aligny center");
-		return options;
+		JPanel panel = new JPanel(new MigLayout("insets 0, hidemode 3", "[]16[]", "[center]"));
+		panel.add(qrColumn, "center");
+		panel.add(right, "center");
+		return panel;
 	}
 
 	private void startPolling() {
@@ -337,15 +352,6 @@ public class MicrosoftLoginDialog extends JDialog {
 		}
 	}
 
-	private void handleOpenBrowser() {
-		SwingHelper.openURL(authUrl, this);
-		if (!alreadyOpenedBrowser) {
-			alreadyOpenedBrowser = true;
-			openBrowserButton.setText(tr("login.microsoft.device.openBrowserAgain"));
-			openBrowserButton.setFont(openBrowserButton.getFont().deriveFont(Font.PLAIN));
-		}
-	}
-
 	private void handleCopy() {
 		SwingHelper.setClipboard(details.getUserCode());
 
@@ -374,10 +380,9 @@ public class MicrosoftLoginDialog extends JDialog {
 
 	private void hideQrOption() {
 		qrSpinnerPanel.stop();
-		if (qrOptionPanel != null) {
-			qrOptionPanel.setVisible(false);
+		if (qrColumn != null) {
+			qrColumn.setVisible(false);
 		}
-		optionDivider.setVisible(false);
 		pack();
 	}
 

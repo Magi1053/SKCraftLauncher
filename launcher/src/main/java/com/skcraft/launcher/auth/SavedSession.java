@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
+import java.util.Objects;
+
 /**
  * Represents a session saved to disk.
  */
@@ -25,7 +27,7 @@ public class SavedSession {
 
 		SavedSession that = (SavedSession) o;
 
-		return getUuid().equals(that.getUuid());
+		return Objects.equals(getUuid(), that.getUuid());
 	}
 
 	@Override

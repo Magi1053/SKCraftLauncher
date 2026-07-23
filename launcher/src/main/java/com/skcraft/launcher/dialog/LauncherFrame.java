@@ -61,6 +61,7 @@ public class LauncherFrame extends JFrame {
     private URL lastLoggedNewsUrl;
     private final JButton launchButton = new JButton(SharedLocale.tr("launcher.launch"));
     private final JButton refreshButton = new JButton(SharedLocale.tr("launcher.checkForUpdates"));
+    private final AccountSwitcher accountSwitcher;
     private final JButton optionsButton = new JButton(SharedLocale.tr("launcher.options"));
     private final JButton selfUpdateButton = new JButton(SharedLocale.tr("launcher.updateLauncher"));
     private final JCheckBox updateCheck = new JCheckBox(SharedLocale.tr("launcher.downloadUpdates"));
@@ -76,6 +77,7 @@ public class LauncherFrame extends JFrame {
         super(tr("launcher.title", launcher.getVersion()));
 
         this.launcher = launcher;
+        this.accountSwitcher = new AccountSwitcher(launcher.getAccounts());
         instancesModel = new InstanceTableModel(launcher);
 
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -108,9 +110,10 @@ public class LauncherFrame extends JFrame {
         // Border lives on the outer panel; keep the SWT view borderless.
         webView.setBrowserBorder(BorderFactory.createEmptyBorder());
 
-        JPanel leftColumn = new TableChromePanel(new MigLayout("ins 0, fill, gap 0", "[grow, fill]", "[grow, fill]"));
+        JPanel leftColumn = new TableChromePanel(new MigLayout("ins 0, fill, gap 0", "[grow, fill]", "[grow, fill][]"));
         leftColumn.setBorder(SwingHelper.uiLineBorder());
-        leftColumn.add(instancesPanel, "grow");
+        leftColumn.add(instancesPanel, "grow, wrap");
+        leftColumn.add(accountSwitcher, "growx");
 
         JPanel newsPanel = new TableChromePanel(new BorderLayout());
         newsPanel.setBorder(SwingHelper.uiLineBorder());
@@ -187,6 +190,13 @@ public class LauncherFrame extends JFrame {
             }
         });
 
+        accountSwitcher.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                AccountSelectDialog.showManageAccounts(LauncherFrame.this, launcher);
+                accountSwitcher.refresh();
+            }
+        });
 
         optionsButton.addActionListener(new ActionListener() {
             @Override

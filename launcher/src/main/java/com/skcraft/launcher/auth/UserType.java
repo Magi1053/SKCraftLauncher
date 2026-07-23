@@ -21,7 +21,11 @@ public enum UserType {
     /**
      * Microsoft accounts login via OAuth.
      */
-    MICROSOFT("msa");
+    MICROSOFT("msa"),
+    /**
+     * Offline accounts are local profiles and launch with legacy user type arguments.
+     */
+    OFFLINE("legacy");
 
     private final String id;
 
