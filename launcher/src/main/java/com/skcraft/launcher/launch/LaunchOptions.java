@@ -23,6 +23,7 @@ public class LaunchOptions {
     private final UpdatePolicy updatePolicy;
     private final LaunchListener listener;
     private final Session session;
+    private final boolean reselectFeatures;
 
     @Data
     public static class Builder {
@@ -32,6 +33,7 @@ public class LaunchOptions {
         private UpdatePolicy updatePolicy = UpdatePolicy.UPDATE_IF_SESSION_ONLINE;
         private LaunchListener listener = new DummyLaunchListener();
         private Session session;
+        private boolean reselectFeatures;
 
         public Builder setWindow(Window window) {
             this.window = window;
@@ -60,9 +62,14 @@ public class LaunchOptions {
             return this;
         }
 
+        public Builder setReselectFeatures(boolean reselectFeatures) {
+            this.reselectFeatures = reselectFeatures;
+            return this;
+        }
+
         public LaunchOptions build() {
             checkNotNull(instance, "instance");
-            return new LaunchOptions(window, instance, updatePolicy, listener, session);
+            return new LaunchOptions(window, instance, updatePolicy, listener, session, reselectFeatures);
         }
     }
 

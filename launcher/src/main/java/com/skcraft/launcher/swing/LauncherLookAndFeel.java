@@ -13,6 +13,15 @@ import com.formdev.flatlaf.themes.FlatMacLightLaf;
 import lombok.extern.java.Log;
 
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
+import java.awt.AWTEvent;
+import java.awt.Component;
+import java.awt.KeyboardFocusManager;
+import java.awt.Toolkit;
+import java.awt.Window;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,6 +33,8 @@ import java.util.logging.Level;
 public final class LauncherLookAndFeel {
 
     private static final String CUSTOM_DEFAULTS_SOURCE = "com.skcraft.launcher.theme";
+    private static boolean clickToClearFocusInstalled;
+    private static boolean escapeToCloseDialogInstalled;
 
     private LauncherLookAndFeel() {
     }
@@ -45,11 +56,82 @@ public final class LauncherLookAndFeel {
                 log.log(Level.WARNING, "Failed to set fallback look and feel", fallbackEx);
             }
         }
+        installClickToClearFocus();
+        installEscapeToCloseDialog();
     }
 
     public static void applyTheme(String themeMode) {
         install(themeMode);
         FlatLaf.updateUI();
+    }
+
+    private static synchronized void installClickToClearFocus() {
+        if (clickToClearFocusInstalled) {
+            return;
+        }
+
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            if (!(event instanceof MouseEvent) || event.getID() != MouseEvent.MOUSE_RELEASED) {
+                return;
+            }
+
+            Component clicked = ((MouseEvent) event).getComponent();
+            if (requiresMouseFocus(clicked)) {
+                return;
+            }
+
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
+        }, AWTEvent.MOUSE_EVENT_MASK);
+        clickToClearFocusInstalled = true;
+    }
+
+    private static synchronized void installEscapeToCloseDialog() {
+        if (escapeToCloseDialogInstalled) {
+            return;
+        }
+
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            if (!(event instanceof KeyEvent) || event.getID() != KeyEvent.KEY_PRESSED) {
+                return;
+            }
+
+            KeyEvent keyEvent = (KeyEvent) event;
+            if (keyEvent.getKeyCode() != KeyEvent.VK_ESCAPE || keyEvent.isConsumed()) {
+                return;
+            }
+
+            MenuElement[] path = MenuSelectionManager.defaultManager().getSelectedPath();
+            if (path != null && path.length > 0) {
+                return;
+            }
+
+            Window active = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+            if (!(active instanceof JDialog) || !active.isDisplayable() || !active.isShowing()) {
+                return;
+            }
+
+            active.dispatchEvent(new WindowEvent(active, WindowEvent.WINDOW_CLOSING));
+            keyEvent.consume();
+        }, AWTEvent.KEY_EVENT_MASK);
+        escapeToCloseDialogInstalled = true;
+    }
+
+    private static boolean requiresMouseFocus(Component component) {
+        for (Component current = component; current != null; current = current.getParent()) {
+            if (current instanceof JTextComponent
+                    || current instanceof JComboBox
+                    || current instanceof JSpinner
+                    || current instanceof JTable
+                    || current instanceof JList
+                    || current instanceof JTree
+                    || current instanceof JSlider) {
+                return true;
+            }
+            if (current instanceof Window) {
+                break;
+            }
+        }
+        return false;
     }
 
     public static boolean isDarkTheme(String themeMode) {

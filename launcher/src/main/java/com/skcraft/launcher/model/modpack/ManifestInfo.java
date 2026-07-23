@@ -16,6 +16,7 @@ public class ManifestInfo extends BaseManifest implements Comparable<ManifestInf
     private String location;
     private int priority;
     private String newsUrl;
+    private String iconUrl;
 
     @Override
     public int compareTo(ManifestInfo o) {

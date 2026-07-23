@@ -13,21 +13,28 @@ import com.skcraft.launcher.util.SharedLocale;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
+import java.io.File;
 
 public class InstanceTableModel extends AbstractTableModel {
 
-    private static final int INSTANCE_ICON_SIZE = 24;
-    private static final int DOWNLOAD_ICON_SIZE = 22;
+    private static final int DOWNLOAD_ICON_SIZE = 24;
 
     private final InstanceList instances;
+    private final InstanceIconCache iconCache;
     private final Icon instanceIcon;
     private final Icon customInstanceIcon;
     private final Icon downloadIcon;
 
-    public InstanceTableModel(InstanceList instances) {
-        this.instances = instances;
-        instanceIcon = SwingHelper.createIcon(Launcher.class, "instance_icon.png", INSTANCE_ICON_SIZE, INSTANCE_ICON_SIZE);
-        customInstanceIcon = SwingHelper.createIcon(Launcher.class, "custom_instance_icon.png", INSTANCE_ICON_SIZE, INSTANCE_ICON_SIZE);
+    public InstanceTableModel(Launcher launcher) {
+        this.instances = launcher.getInstances();
+        this.iconCache = new InstanceIconCache(
+                new File(launcher.getBaseDir(), "cache/icons"),
+                launcher.getExecutor(),
+                () -> SwingUtilities.invokeLater(this::fireTableDataChanged));
+        instanceIcon = SwingHelper.createIcon(Launcher.class, "instance_icon.png",
+                InstanceRowStyle.ICON_SIZE, InstanceRowStyle.ICON_SIZE);
+        customInstanceIcon = SwingHelper.createIcon(Launcher.class, "custom_instance_icon.png",
+                InstanceRowStyle.ICON_SIZE, InstanceRowStyle.ICON_SIZE);
         downloadIcon = SwingHelper.createIcon(Launcher.class, "download_icon.png", DOWNLOAD_ICON_SIZE, DOWNLOAD_ICON_SIZE);
     }
 
@@ -86,10 +93,15 @@ public class InstanceTableModel extends AbstractTableModel {
         if (!instance.isLocal()) {
             return downloadIcon;
         } else if (instance.getManifestURL() != null) {
-            return instanceIcon;
+            Icon remote = iconCache.get(instance.getIconUrl());
+            return remote != null ? remote : instanceIcon;
         } else {
             return customInstanceIcon;
         }
+    }
+
+    public int getIconColumnWidth() {
+        return InstanceRowStyle.ICON_SIZE;
     }
 
 }

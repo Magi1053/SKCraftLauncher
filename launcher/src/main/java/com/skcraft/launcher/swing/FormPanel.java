@@ -30,7 +30,7 @@ public class FormPanel extends JPanel {
         labelConstraints.insets = new Insets(4, 5, 1, 10);
 
         wideFieldConstraints = (GridBagConstraints) fieldConstraints.clone();
-        wideFieldConstraints.insets = new Insets(7, 2, 1, 2);
+        wideFieldConstraints.insets = new Insets(7, 2, 3, 2);
     }
 
     public FormPanel() {

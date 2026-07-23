@@ -217,24 +217,13 @@ public class ConfigurationDialog extends JDialog {
         row.add(titleLabel, "growx");
         row.add(settingsButton, "spany 2, aligny center, wrap");
 
-        JLabel descriptionLabel = new JLabel(getInstanceSettingsDescription(instance));
+        JLabel descriptionLabel = new JLabel(InstanceStatusText.forInstance(instance));
         descriptionLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         row.add(descriptionLabel, "growx");
 
         return row;
     }
 
-    private String getInstanceSettingsDescription(Instance instance) {
-        if (!instance.isLocal()) {
-            return SharedLocale.tr("options.instanceNotInstalled");
-        }
-
-        if (instance.isUpdatePending()) {
-            return SharedLocale.tr("options.instanceUpdatePending");
-        }
-
-        return SharedLocale.tr("options.instanceInstalled");
-    }
 
     /**
      * Save the configuration and close the dialog.

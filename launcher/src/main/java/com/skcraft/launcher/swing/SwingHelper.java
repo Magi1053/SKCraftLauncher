@@ -484,6 +484,27 @@ public final class SwingHelper {
     /**
      * Background color used by list/table panes such as the instances panel.
      */
+    public static Border uiLineBorder() {
+        return new AbstractBorder() {
+            @Override
+            public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+                g.setColor(uiColor("Component.borderColor", Color.GRAY));
+                g.drawRect(x, y, width - 1, height - 1);
+            }
+
+            @Override
+            public Insets getBorderInsets(Component c, Insets insets) {
+                insets.set(1, 1, 1, 1);
+                return insets;
+            }
+
+            @Override
+            public boolean isBorderOpaque() {
+                return false;
+            }
+        };
+    }
+
     public static Color tableBackground() {
         return uiColor("Table.background", Color.WHITE);
     }

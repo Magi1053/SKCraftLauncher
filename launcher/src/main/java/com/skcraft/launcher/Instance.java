@@ -30,6 +30,7 @@ public class Instance implements Comparable<Instance> {
     private String name;
     private String version;
     private String newsUrl;
+    private String iconUrl;
     private boolean updatePending;
     private boolean installed;
     private Date lastAccessed;
@@ -54,15 +55,23 @@ public class Instance implements Comparable<Instance> {
     }
 
     public String getNewsUrl() {
-        return normalizeNewsUrl(newsUrl);
+        return normalizeOptionalUrl(newsUrl);
     }
 
     public void setNewsUrl(String newsUrl) {
-        this.newsUrl = normalizeNewsUrl(newsUrl);
+        this.newsUrl = normalizeOptionalUrl(newsUrl);
     }
 
-    private static String normalizeNewsUrl(String newsUrl) {
-        return Strings.emptyToNull(Strings.nullToEmpty(newsUrl).trim());
+    public String getIconUrl() {
+        return normalizeOptionalUrl(iconUrl);
+    }
+
+    public void setIconUrl(String iconUrl) {
+        this.iconUrl = normalizeOptionalUrl(iconUrl);
+    }
+
+    private static String normalizeOptionalUrl(String url) {
+        return Strings.emptyToNull(Strings.nullToEmpty(url).trim());
     }
 
     /**
