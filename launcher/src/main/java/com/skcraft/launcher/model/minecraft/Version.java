@@ -25,6 +25,27 @@ public class Version {
     @NonNull
     private String url;
 
+    /**
+     * Mojang manifest version type (e.g. release, snapshot), when present.
+     */
+    @Getter
+    @Setter
+    private String type;
+
+    /**
+     * Mojang manifest timestamp (ISO-8601), when present.
+     */
+    @Getter
+    @Setter
+    private String time;
+
+    /**
+     * Mojang manifest release timestamp (ISO-8601), when present.
+     */
+    @Getter
+    @Setter
+    private String releaseTime;
+
     public Version() {
     }
 

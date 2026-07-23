@@ -15,7 +15,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.skcraft.concurrency.ProgressObservable;
-import com.skcraft.launcher.util.HttpRequest;
+import com.skcraft.launcher.util.SharedHttpClient;
 import com.skcraft.launcher.util.SharedLocale;
 import lombok.Getter;
 import lombok.NonNull;
@@ -23,8 +23,19 @@ import lombok.Setter;
 import lombok.extern.java.Log;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -39,7 +50,7 @@ public class HttpDownloader implements Downloader {
     private final HashFunction hf = Hashing.sha1();
 
     private final File tempDir;
-    @Getter @Setter private int threadCount = 6;
+    @Getter @Setter private int threadCount = 32;
     @Getter @Setter private int retryDelay = 2000;
     @Getter @Setter private int tryCount = 3;
 
@@ -48,6 +59,7 @@ public class HttpDownloader implements Downloader {
 
     private final List<HttpDownloadJob> running = new ArrayList<HttpDownloadJob>();
     private final List<HttpDownloadJob> failed = new ArrayList<HttpDownloadJob>();
+    private boolean interrupted;
     private long downloaded = 0;
     private long total = 0;
     private int left = 0;
@@ -105,6 +117,21 @@ public class HttpDownloader implements Downloader {
         return download(urls, key, size, name);
     }
 
+    @Override
+    public synchronized void download(@NonNull List<URL> urls, @NonNull File destination,
+            long size, String name) {
+        if (urls.isEmpty()) {
+            throw new IllegalArgumentException("Can't download empty list of URLs");
+        }
+
+        if (!destination.exists()) {
+            total += size;
+            left++;
+            queue.add(new HttpDownloadJob(destination, urls, size,
+                    name != null ? name : destination.getName()));
+        }
+    }
+
     /**
      * Prevent further downloads from being queued and download queued files.
      *
@@ -135,6 +162,9 @@ public class HttpDownloader implements Downloader {
             }
 
             synchronized (this) {
+                if (interrupted) {
+                    throw new InterruptedException("One or more downloads were interrupted");
+                }
                 if (failed.size() > 0) {
                     throw new IOException(failed.size() + " file(s) could not be downloaded");
                 }
@@ -183,7 +213,7 @@ public class HttpDownloader implements Downloader {
         private final List<URL> urls;
         private final long size;
         @Getter private String name;
-        private HttpRequest request;
+        private volatile long transferred;
 
         private HttpDownloadJob(File destFile, List<URL> urls, long size, String name) {
             this.destFile = destFile;
@@ -204,12 +234,19 @@ public class HttpDownloader implements Downloader {
                 synchronized (HttpDownloader.this) {
                     downloaded += size;
                 }
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
+                deleteTemporaryFile();
+                log.log(Level.WARNING, "Failed to download " + destFile + " from " + urls, e);
                 synchronized (HttpDownloader.this) {
                     failed.add(this);
                 }
             } catch (InterruptedException e) {
+                deleteTemporaryFile();
+                Thread.currentThread().interrupt();
                 log.info("Download of " + destFile + " was interrupted");
+                synchronized (HttpDownloader.this) {
+                    interrupted = true;
+                }
             } finally {
                 synchronized (HttpDownloader.this) {
                     left--;
@@ -219,18 +256,33 @@ public class HttpDownloader implements Downloader {
         }
 
         private void download() throws IOException, InterruptedException {
-            log.log(Level.INFO, "Downloading " + destFile + " from " + urls);
+            log.log(Level.FINE, "Downloading " + destFile + " from " + urls);
 
             File destDir = destFile.getParentFile();
-            File tempFile = new File(destDir, destFile.getName() + ".tmp");
+            File tempFile = getTemporaryFile();
             destDir.mkdirs();
 
             // Try to download
             download(tempFile);
 
-            destFile.delete();
-            if (!tempFile.renameTo(destFile)) {
-                throw new IOException(String.format("Failed to rename %s to %s", tempFile, destFile));
+            try {
+                Files.move(tempFile.toPath(), destFile.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tempFile.toPath(), destFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+
+        private File getTemporaryFile() {
+            return new File(destFile.getParentFile(), destFile.getName() + ".tmp");
+        }
+
+        private void deleteTemporaryFile() {
+            try {
+                Files.deleteIfExists(getTemporaryFile().toPath());
+            } catch (IOException e) {
+                log.log(Level.FINE, "Failed to remove partial download for " + destFile, e);
             }
         }
 
@@ -248,7 +300,7 @@ public class HttpDownloader implements Downloader {
                     first = false;
 
                     try {
-                        tryDownloadFrom(url, file, null, 0);
+                        tryDownloadFrom(url, file);
                         return;
                     } catch (IOException e) {
                         lastException = e;
@@ -259,31 +311,85 @@ public class HttpDownloader implements Downloader {
             throw new IOException("Failed to download from " + urls, lastException);
         }
 
-        private void tryDownloadFrom(URL url, File file, HttpRequest.PartialDownloadInfo retryDetails, int tries)
-                throws InterruptedException, IOException {
+        private void tryDownloadFrom(URL url, File file) throws InterruptedException, IOException {
+            long existingLength = file.isFile() ? file.length() : 0;
+            if (size > 0 && existingLength == size) {
+                transferred = existingLength;
+                return;
+            }
+
+            HttpRequest.Builder builder = HttpRequest.newBuilder(toUri(url))
+                    .GET()
+                    .timeout(Duration.ofMinutes(10))
+                    .header("User-Agent", "Mozilla/5.0 (Java) SKMCLauncher");
+            if (existingLength > 0) {
+                builder.header("Range", "bytes=" + existingLength + "-");
+            }
+
+            HttpResponse<InputStream> response;
             try {
-                request = HttpRequest.get(url);
-                request.setResumeInfo(retryDetails).execute().expectResponseCode(200).saveContent(file);
-            } catch (IOException e) {
-                log.log(Level.WARNING, "Failed to download " + url, e);
+                response = SharedHttpClient.get().send(builder.build(),
+                        HttpResponse.BodyHandlers.ofInputStream());
+            } catch (IllegalArgumentException e) {
+                throw new IOException("Invalid download URL " + url, e);
+            }
 
-                // We only want to try to resume a partial download if the request succeeded before
-                // throwing an exception halfway through. If it didn't succeed, just throw the error.
-                if (tries >= tryCount || !request.isConnected() || !request.isSuccessCode()) {
-                    throw e;
+            int status = response.statusCode();
+            boolean append = existingLength > 0 && status == 206;
+            if (status != 200 && !append) {
+                response.body().close();
+                throw new IOException("Did not get expected response code, got " + status + " for " + url);
+            }
+
+            long baseLength = append ? existingLength : 0;
+            long responseLength = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+            transferred = baseLength;
+
+            StandardOpenOption[] options = append
+                    ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+                            StandardOpenOption.APPEND}
+                    : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+                            StandardOpenOption.TRUNCATE_EXISTING};
+
+            long responseBytes = 0;
+            try (InputStream in = response.body();
+                    OutputStream out = Files.newOutputStream(file.toPath(), options)) {
+                byte[] buffer = new byte[32 * 1024];
+                int length;
+                while ((length = in.read(buffer)) >= 0) {
+                    out.write(buffer, 0, length);
+                    responseBytes += length;
+                    transferred = baseLength + responseBytes;
+                    if (Thread.currentThread().isInterrupted()) {
+                        throw new InterruptedException();
+                    }
                 }
+            }
 
-                Optional<HttpRequest.PartialDownloadInfo> byteRangeSupport = request.canRetryPartial();
-                if (byteRangeSupport.isPresent()) {
-                    tryDownloadFrom(url, file, byteRangeSupport.get(), tries + 1);
+            if (responseLength >= 0 && responseBytes != responseLength) {
+                throw new IOException(String.format(
+                        "Connection closed with %d bytes transferred, expected %d",
+                        responseBytes, responseLength));
+            }
+        }
+
+        private URI toUri(URL url) throws IOException {
+            try {
+                return url.toURI();
+            } catch (URISyntaxException e) {
+                try {
+                    // URL accepts unescaped spaces while URI does not. Preserve
+                    // existing percent escapes and quote the common legacy form.
+                    return new URI(url.toExternalForm().replace(" ", "%20"));
+                } catch (URISyntaxException nested) {
+                    throw new IOException("Invalid download URL " + url, nested);
                 }
             }
         }
 
         @Override
         public double getProgress() {
-            HttpRequest request = this.request;
-            return request != null ? request.getProgress() : -1;
+            return size > 0 ? Math.min(1, transferred / (double) size) : -1;
         }
 
         @Override

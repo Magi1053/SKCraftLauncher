@@ -398,13 +398,11 @@ public class PackageBuilder {
     private <V> V read(File path, Class<V> clazz) throws IOException {
         try {
             if (path == null) {
-                return clazz.newInstance();
+                return clazz.getDeclaredConstructor().newInstance();
             } else {
                 return mapper.readValue(path, clazz);
             }
-        } catch (InstantiationException e) {
-            throw new IOException("Failed to create " + clazz.getCanonicalName(), e);
-        } catch (IllegalAccessException e) {
+        } catch (ReflectiveOperationException e) {
             throw new IOException("Failed to create " + clazz.getCanonicalName(), e);
         }
     }

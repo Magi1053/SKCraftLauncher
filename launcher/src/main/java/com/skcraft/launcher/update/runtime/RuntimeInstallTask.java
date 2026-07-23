@@ -23,7 +23,7 @@ public class RuntimeInstallTask implements Callable<JavaRuntime>, ProgressObserv
     public RuntimeInstallTask(Launcher launcher, JavaVersion javaVersion) {
         this.launcher = launcher;
         this.javaVersion = javaVersion;
-        this.installer = new Installer(launcher.getInstallerDir());
+        this.installer = new Installer(launcher.getInstallerDir(), launcher.getDownloadThreads());
     }
 
     @Override

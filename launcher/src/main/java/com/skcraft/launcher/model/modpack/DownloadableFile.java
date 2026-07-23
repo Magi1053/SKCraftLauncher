@@ -1,5 +1,6 @@
 package com.skcraft.launcher.model.modpack;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.skcraft.launcher.install.Installer;
 import com.skcraft.launcher.model.minecraft.Side;
 import lombok.Data;
@@ -12,6 +13,7 @@ import java.net.URL;
 import static com.skcraft.launcher.LauncherUtils.concat;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DownloadableFile {
 	private String name;
 	private String hash;

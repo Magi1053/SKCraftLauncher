@@ -17,6 +17,7 @@ import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
 public class PackManagerFrame extends JFrame {
@@ -42,6 +43,9 @@ public class PackManagerFrame extends JFrame {
     @Getter private final JMenuItem checkProblemsMenuItem = new JMenuItem("Scan for Problems...");
     @Getter private final JMenuItem testMenuItem = new JMenuItem("Test");
     @Getter private final JMenuItem testOnlineMenuItem = new JMenuItem("Test Online");
+    @Getter private final JMenuItem selectFeaturesMenuItem = new JMenuItem("Optional features...");
+    @Getter private final JMenuItem verifyFilesMenuItem = new JMenuItem("Verify files");
+    @Getter private final JMenuItem reinstallModsMenuItem = new JMenuItem("Reinstall mods & configs...");
     @Getter private final JMenuItem optionsMenuItem = new JMenuItem("Test Launcher Options...");
     @Getter private final JMenuItem instanceOptionsMenuItem = new JMenuItem("Test Instance Options...");
     @Getter private final JMenuItem clearInstanceMenuItem = new JMenuItem("Delete Test Launcher Instances");
@@ -111,16 +115,16 @@ public class PackManagerFrame extends JFrame {
     }
 
     private void initMenu() {
-        int ctrlKeyMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
+        int ctrlKeyMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
 
         newPackMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, ctrlKeyMask));
-        newPackAtLocationMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, ctrlKeyMask | Event.SHIFT_MASK));
+        newPackAtLocationMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, ctrlKeyMask | InputEvent.SHIFT_DOWN_MASK));
         editConfigMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_E, ctrlKeyMask));
-        openFolderMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, ctrlKeyMask | Event.SHIFT_MASK));
+        openFolderMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, ctrlKeyMask | InputEvent.SHIFT_DOWN_MASK));
         testMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
         testOnlineMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0));
-        buildMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F10, Event.SHIFT_MASK));
-        deployServerMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9, Event.SHIFT_MASK));
+        buildMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F10, InputEvent.SHIFT_DOWN_MASK));
+        deployServerMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9, InputEvent.SHIFT_DOWN_MASK));
         docsMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
 
         JMenuBar menuBar;
@@ -162,6 +166,10 @@ public class PackManagerFrame extends JFrame {
         menuBar.add(menu);
         menu.add(testMenuItem);
         menu.add(testOnlineMenuItem);
+        menu.addSeparator();
+        menu.add(selectFeaturesMenuItem);
+        menu.add(verifyFilesMenuItem);
+        menu.add(reinstallModsMenuItem);
         menu.addSeparator();
         menu.add(optionsMenuItem);
         menu.add(instanceOptionsMenuItem);

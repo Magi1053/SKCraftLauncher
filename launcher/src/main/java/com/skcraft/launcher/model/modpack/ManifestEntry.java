@@ -7,6 +7,7 @@
 package com.skcraft.launcher.model.modpack;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.skcraft.launcher.install.InstallExtras;
@@ -28,6 +29,7 @@ import lombok.ToString;
 })
 @Data
 @ToString(exclude = "manifest")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class ManifestEntry {
 
     @JsonBackReference("manifest")

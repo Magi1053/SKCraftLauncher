@@ -17,10 +17,13 @@ import com.skcraft.launcher.builder.FnPatternList;
 import com.skcraft.launcher.creator.Creator;
 import com.skcraft.launcher.creator.model.swing.FeaturePatternTableModel;
 import com.skcraft.launcher.model.minecraft.JavaVersion;
+import com.skcraft.launcher.model.minecraft.ReleaseList;
+import com.skcraft.launcher.model.minecraft.Version;
 import com.skcraft.launcher.model.minecraft.runtime.RuntimeInfo;
 import com.skcraft.launcher.model.minecraft.runtime.RuntimeList;
 import com.skcraft.launcher.model.minecraft.runtime.RuntimePlatform;
 import com.skcraft.launcher.model.modpack.LaunchModifier;
+import com.skcraft.launcher.swing.GroupedComboBox;
 import com.skcraft.launcher.swing.SwingHelper;
 import com.skcraft.launcher.swing.TextFieldPopupMenu;
 import com.skcraft.launcher.util.Environment;
@@ -28,20 +31,32 @@ import com.skcraft.launcher.util.HttpRequest;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class BuilderConfigDialog extends JDialog {
 
+    private static final Pattern MAJOR_VERSION_PATTERN = Pattern.compile("^(\\d+\\.\\d+)");
+    private static final String OTHER_MAJOR_GROUP = "Other";
+
     private final JTextField nameText = new JTextField(20);
     private final JTextField titleText = new JTextField(30);
-    private final JTextField gameVersionText = new JTextField(10);
+    private final JComboBox<Object> gameVersionBox = new JComboBox<>();
     private final JComboBox<RuntimeChoice> javaVersionBox = new JComboBox<>();
     private final JSpinner minMemorySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 65536, 128));
     private final JSpinner maxMemorySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 65536, 128));
@@ -73,9 +88,15 @@ public class BuilderConfigDialog extends JDialog {
     private void initComponents() {
         nameText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         titleText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
-        gameVersionText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         launchFlagsArea.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         userFilesIncludeArea.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
+
+        gameVersionBox.setEditable(true);
+        gameVersionBox.setRenderer(new GameVersionRenderer());
+        Component editorComponent = gameVersionBox.getEditor().getEditorComponent();
+        if (editorComponent instanceof JTextField) {
+            ((JTextField) editorComponent).setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
+        }
 
         launchFlagsArea.setFont(nameText.getFont());
         userFilesIncludeArea.setFont(nameText.getFont());
@@ -110,8 +131,9 @@ public class BuilderConfigDialog extends JDialog {
                 return;
             }
 
-            if (gameVersionText.getText().trim().isEmpty()) {
-                SwingHelper.showErrorDialog(BuilderConfigDialog.this, "The 'Game Version' field must be a Minecraft version.", "Input Error");
+            if (getGameVersionText().isEmpty()) {
+                SwingHelper.showErrorDialog(BuilderConfigDialog.this,
+                        "The 'Game Version' field must be a Minecraft version.", "Input Error");
                 return;
             }
 
@@ -144,7 +166,7 @@ public class BuilderConfigDialog extends JDialog {
         container.add(titleText, "span");
 
         container.add(new JLabel("Game Version:"));
-        container.add(gameVersionText, "span");
+        container.add(gameVersionBox, "span, growx, w 220!");
 
         container.add(new JLabel("Java Version:"));
         container.add(javaVersionBox, "span");
@@ -160,8 +182,11 @@ public class BuilderConfigDialog extends JDialog {
         container.add(new JLabel("Minimum Memory (Xms, MB):"));
         container.add(minMemorySpinner, "wrap");
 
-        container.add(new JLabel("Minimum Max Memory (Xmx, MB):"));
+        container.add(new JLabel("Maximum Memory (Xmx, MB):"));
         container.add(maxMemorySpinner, "wrap, gapbottom unrel");
+
+        SwingHelper.enableSpinnerMouseWheel(minMemorySpinner, maxMemorySpinner);
+        SwingHelper.linkMinMaxSpinners(minMemorySpinner, maxMemorySpinner);
 
         container.add(new JLabel("Launch Flags:"), "wrap");
         container.add(SwingHelper.wrapScrollPane(launchFlagsArea), "span");
@@ -305,15 +330,18 @@ public class BuilderConfigDialog extends JDialog {
     private void copyFrom() {
         SwingHelper.setTextAndResetCaret(nameText, config.getName());
         SwingHelper.setTextAndResetCaret(titleText, config.getTitle());
-        SwingHelper.setTextAndResetCaret(gameVersionText, config.getGameVersion());
+        loadGameVersions(config.getGameVersion());
         JavaVersion javaVersion = config.getJavaVersion();
         loadRuntimeChoices(javaVersion);
         selectRuntimeChoice(javaVersion);
         minMemorySpinner.setValue(config.getLaunchModifier().getMinMemory());
         maxMemorySpinner.setValue(config.getLaunchModifier().getMaxMemory());
-        SwingHelper.setTextAndResetCaret(launchFlagsArea, SwingHelper.listToLines(config.getLaunchModifier().getFlags()));
-        SwingHelper.setTextAndResetCaret(userFilesIncludeArea, SwingHelper.listToLines(config.getUserFiles().getInclude()));
-        SwingHelper.setTextAndResetCaret(userFilesExcludeArea, SwingHelper.listToLines(config.getUserFiles().getExclude()));
+        SwingHelper.setTextAndResetCaret(launchFlagsArea,
+                SwingHelper.listToLines(config.getLaunchModifier().getFlags()));
+        SwingHelper.setTextAndResetCaret(userFilesIncludeArea,
+                SwingHelper.listToLines(config.getUserFiles().getInclude()));
+        SwingHelper.setTextAndResetCaret(userFilesExcludeArea,
+                SwingHelper.listToLines(config.getUserFiles().getExclude()));
         featuresModel = new FeaturePatternTableModel(config.getFeatures());
         featuresTable.setModel(featuresModel);
     }
@@ -321,7 +349,7 @@ public class BuilderConfigDialog extends JDialog {
     private void copyTo() {
         config.setName(nameText.getText().trim());
         config.setTitle(Strings.emptyToNull(titleText.getText().trim()));
-        config.setGameVersion(gameVersionText.getText().trim());
+        config.setGameVersion(getGameVersionText());
         RuntimeChoice choice = getSelectedRuntimeChoice();
         String component = choice != null ? Strings.emptyToNull(choice.component) : null;
         if (component == null) {
@@ -347,6 +375,228 @@ public class BuilderConfigDialog extends JDialog {
         BuilderConfigDialog dialog = new BuilderConfigDialog(window, config);
         dialog.setVisible(true);
         return dialog.saved;
+    }
+
+    private String getGameVersionText() {
+        Component editorComponent = gameVersionBox.getEditor().getEditorComponent();
+        if (editorComponent instanceof JTextField) {
+            return ((JTextField) editorComponent).getText().trim();
+        }
+        Object selected = gameVersionBox.getSelectedItem();
+        if (selected instanceof GameVersionOption) {
+            return ((GameVersionOption) selected).id;
+        }
+        return Strings.nullToEmpty(selected != null ? selected.toString() : "").trim();
+    }
+
+    private void setGameVersionEditorText(String text) {
+        Component editorComponent = gameVersionBox.getEditor().getEditorComponent();
+        if (editorComponent instanceof JTextField) {
+            ((JTextField) editorComponent).setText(Strings.nullToEmpty(text));
+        }
+    }
+
+    private void selectGameVersion(String version) {
+        String selected = Strings.nullToEmpty(version).trim();
+        if (selected.isEmpty()) {
+            gameVersionBox.setSelectedItem(null);
+            setGameVersionEditorText("");
+            return;
+        }
+
+        ComboBoxModel<Object> model = gameVersionBox.getModel();
+        for (int i = 0; i < model.getSize(); i++) {
+            Object element = model.getElementAt(i);
+            if (element instanceof GameVersionOption
+                    && selected.equals(((GameVersionOption) element).id)) {
+                gameVersionBox.setSelectedItem(element);
+                setGameVersionEditorText(selected);
+                return;
+            }
+        }
+
+        gameVersionBox.setSelectedItem(null);
+        setGameVersionEditorText(selected);
+    }
+
+    private void loadGameVersions(String selectedVersion) {
+        GroupedComboBox.Model model = new GroupedComboBox.Model();
+
+        try {
+            List<Version> versions = fetchGameVersions();
+            model = buildGroupedGameVersionModel(versions, selectedVersion);
+        } catch (Exception e) {
+            SwingHelper.showErrorDialog(this,
+                    "Failed to load Minecraft versions from Mojang. Existing values can still be preserved.",
+                    "Game Versions", e);
+            String selected = Strings.emptyToNull(Strings.nullToEmpty(selectedVersion).trim());
+            if (selected != null) {
+                model.addGroup(majorGroupForId(selected));
+                model.addElement(new GameVersionOption(selected, null));
+            }
+        }
+
+        gameVersionBox.setModel(model);
+        selectGameVersion(selectedVersion);
+    }
+
+    private static GroupedComboBox.Model buildGroupedGameVersionModel(
+            List<Version> versions, String selectedVersion) {
+        GroupedComboBox.Model model = new GroupedComboBox.Model();
+        if (versions == null) {
+            versions = Collections.emptyList();
+        }
+
+        List<Version> dated = new ArrayList<>(versions);
+        Map<Version, Integer> originalIndex = new HashMap<>();
+        for (int i = 0; i < dated.size(); i++) {
+            originalIndex.put(dated.get(i), i);
+        }
+
+        Comparator<Version> descending = (a, b) -> compareByReleaseDate(a, b, originalIndex, false);
+
+        List<Version> newestFirst = new ArrayList<>();
+        for (Version version : dated) {
+            String id = version.getId();
+            // Skip week-format / other unversioned snapshots (e.g. 24w14a); keep 1.21-pre1, etc.
+            if (Strings.isNullOrEmpty(id) || parseMajorGroup(id) == null) {
+                continue;
+            }
+            newestFirst.add(version);
+        }
+        newestFirst.sort(descending);
+
+        String lastMajor = null;
+        for (Version version : newestFirst) {
+            String id = version.getId();
+            String major = parseMajorGroup(id);
+            if (major == null) {
+                continue;
+            }
+            if (!major.equals(lastMajor)) {
+                model.addGroup(major);
+                lastMajor = major;
+            }
+            model.addElement(new GameVersionOption(id, version.getType()));
+        }
+
+        String selected = Strings.emptyToNull(Strings.nullToEmpty(selectedVersion).trim());
+        if (selected != null && !containsGameVersion(model, selected)) {
+            insertCustomGameVersion(model, selected);
+        }
+
+        return model;
+    }
+
+    private static void insertCustomGameVersion(GroupedComboBox.Model model, String selected) {
+        String major = majorGroupForId(selected);
+        int groupIndex = -1;
+        int insertIndex = model.getSize();
+
+        for (int i = 0; i < model.getSize(); i++) {
+            Object element = model.getElementAt(i);
+            if (element instanceof GroupedComboBox.Group) {
+                if (groupIndex >= 0) {
+                    insertIndex = i;
+                    break;
+                }
+                if (major.equals(((GroupedComboBox.Group) element).getLabel())) {
+                    groupIndex = i;
+                }
+            }
+        }
+
+        if (groupIndex < 0) {
+            model.addGroup(major);
+            model.addElement(new GameVersionOption(selected, null));
+            return;
+        }
+
+        model.insertElementAt(new GameVersionOption(selected, null), insertIndex);
+    }
+
+    private static String majorGroupForId(String id) {
+        String parsed = parseMajorGroup(id);
+        return parsed != null ? parsed : OTHER_MAJOR_GROUP;
+    }
+
+    private static String parseMajorGroup(String id) {
+        Matcher matcher = MAJOR_VERSION_PATTERN.matcher(id);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    private static boolean containsGameVersion(ComboBoxModel<Object> model, String versionId) {
+        for (int i = 0; i < model.getSize(); i++) {
+            Object element = model.getElementAt(i);
+            if (element instanceof GameVersionOption
+                    && versionId.equals(((GameVersionOption) element).id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<Version> fetchGameVersions() throws IOException, InterruptedException {
+        Properties launcherProperties = LauncherUtils.loadProperties(
+                Launcher.class, "launcher.properties", "com.skcraft.launcher.propertiesFile");
+        String versionManifestUrl = launcherProperties.getProperty("versionManifestUrl");
+
+        ReleaseList releases = HttpRequest.get(HttpRequest.url(versionManifestUrl))
+                .execute()
+                .expectResponseCode(200)
+                .returnContent()
+                .asJson(ReleaseList.class);
+
+        List<Version> versions = releases.getVersions();
+        return versions != null ? versions : Collections.emptyList();
+    }
+
+    private static int compareByReleaseDate(Version a, Version b, Map<Version, Integer> originalIndex,
+                                            boolean ascending) {
+        long timeA = parseVersionTime(a);
+        long timeB = parseVersionTime(b);
+        boolean datedA = timeA != Long.MIN_VALUE;
+        boolean datedB = timeB != Long.MIN_VALUE;
+
+        if (datedA && datedB) {
+            int cmp = Long.compare(timeA, timeB);
+            return ascending ? cmp : -cmp;
+        }
+        // Undated entries always follow dated ones; preserve manifest order among themselves.
+        if (datedA) {
+            return -1;
+        }
+        if (datedB) {
+            return 1;
+        }
+
+        int indexA = originalIndex.getOrDefault(a, 0);
+        int indexB = originalIndex.getOrDefault(b, 0);
+        return Integer.compare(indexA, indexB);
+    }
+
+    private static long parseVersionTime(Version version) {
+        String timestamp = Strings.emptyToNull(version.getReleaseTime());
+        if (timestamp == null) {
+            timestamp = Strings.emptyToNull(version.getTime());
+        }
+        if (timestamp == null) {
+            return Long.MIN_VALUE;
+        }
+
+        try {
+            return OffsetDateTime.parse(timestamp).toInstant().toEpochMilli();
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return Instant.parse(timestamp).toEpochMilli();
+        } catch (DateTimeParseException ignored) {
+            return Long.MIN_VALUE;
+        }
     }
 
     private void selectRuntimeChoice(JavaVersion selectedVersion) {
@@ -524,6 +774,135 @@ public class BuilderConfigDialog extends JDialog {
 
     private static String formatJavaMajorVersion(int majorVersion) {
         return majorVersion == 8 ? "1.8" : String.valueOf(majorVersion);
+    }
+
+    private static final class GameVersionOption {
+        private final String id;
+        private final String type;
+
+        private GameVersionOption(String id, String type) {
+            this.id = id;
+            this.type = type;
+        }
+
+        @Override
+        public String toString() {
+            return id;
+        }
+    }
+
+    private static final class GameVersionRenderer implements ListCellRenderer<Object> {
+        private final JPanel panel = new JPanel(new BorderLayout(8, 0));
+        private final JLabel nameLabel = new JLabel();
+        private final JLabel typeLabel = new JLabel();
+
+        private GameVersionRenderer() {
+            panel.setOpaque(true);
+            nameLabel.setOpaque(false);
+            typeLabel.setOpaque(false);
+            panel.add(nameLabel, BorderLayout.WEST);
+            panel.add(typeLabel, BorderLayout.EAST);
+        }
+
+        @Override
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                      boolean isSelected, boolean cellHasFocus) {
+            boolean inPopup = index >= 0;
+            boolean isGroup = value instanceof GroupedComboBox.Group;
+
+            Color background;
+            Color foreground;
+            if (!isGroup && isSelected) {
+                background = list.getSelectionBackground();
+                foreground = list.getSelectionForeground();
+            } else {
+                background = list.getBackground();
+                foreground = list.getForeground();
+            }
+            panel.setBackground(background);
+            nameLabel.setForeground(foreground);
+            typeLabel.setForeground(foreground);
+
+            if (value == null) {
+                nameLabel.setText("");
+                typeLabel.setText("");
+                typeLabel.setVisible(false);
+                panel.setBorder(BorderFactory.createEmptyBorder());
+                return panel;
+            }
+
+            if (isGroup) {
+                nameLabel.setText(((GroupedComboBox.Group) value).getLabel());
+                nameLabel.setFont(list.getFont().deriveFont(Font.BOLD));
+                Color disabled = UIManager.getColor("Label.disabledForeground");
+                if (disabled != null) {
+                    nameLabel.setForeground(disabled);
+                }
+                typeLabel.setText("");
+                typeLabel.setVisible(false);
+                if (inPopup && index > 0) {
+                    Color separator = UIManager.getColor("Separator.foreground");
+                    if (separator == null) {
+                        separator = UIManager.getColor("Component.borderColor");
+                    }
+                    Border line = separator != null
+                            ? BorderFactory.createMatteBorder(1, 0, 0, 0, separator)
+                            : BorderFactory.createEmptyBorder();
+                    panel.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createEmptyBorder(6, 0, 0, 0),
+                            BorderFactory.createCompoundBorder(line,
+                                    BorderFactory.createEmptyBorder(2, 8, 2, 8))));
+                } else if (inPopup) {
+                    panel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+                } else {
+                    panel.setBorder(BorderFactory.createEmptyBorder());
+                }
+                return panel;
+            }
+
+            GameVersionOption option = (GameVersionOption) value;
+            nameLabel.setText(option.id);
+            nameLabel.setFont(list.getFont().deriveFont(Font.PLAIN));
+            String typeText = formatVersionType(option.type);
+            typeLabel.setText(typeText);
+            typeLabel.setVisible(inPopup && !typeText.isEmpty());
+            typeLabel.setFont(list.getFont().deriveFont(Font.PLAIN));
+            if (!isSelected) {
+                Color muted = UIManager.getColor("Label.disabledForeground");
+                if (muted != null) {
+                    typeLabel.setForeground(muted);
+                }
+            }
+            panel.setBorder(inPopup
+                    ? BorderFactory.createEmptyBorder(2, 16, 2, 8)
+                    : BorderFactory.createEmptyBorder());
+            return panel;
+        }
+    }
+
+    private static String formatVersionType(String type) {
+        if (Strings.isNullOrEmpty(type)) {
+            return "";
+        }
+        String normalized = type.trim().replace('_', ' ');
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        StringBuilder formatted = new StringBuilder(normalized.length());
+        boolean capitalizeNext = true;
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            if (Character.isWhitespace(c)) {
+                formatted.append(c);
+                capitalizeNext = true;
+            } else if (capitalizeNext) {
+                formatted.append(Character.toUpperCase(c));
+                capitalizeNext = false;
+            } else {
+                formatted.append(Character.toLowerCase(c));
+            }
+        }
+        return formatted.toString();
     }
 
     private static class RuntimeChoice {

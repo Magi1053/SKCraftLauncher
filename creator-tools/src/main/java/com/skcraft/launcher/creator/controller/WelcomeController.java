@@ -129,7 +129,7 @@ public class WelcomeController {
         dialog.getRecentList().addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) {
                 if (e.getClickCount() == 2) {
-                    JList<RecentEntry> table = (JList<RecentEntry>) e.getSource();
+                    JList<RecentEntry> table = dialog.getRecentList();
                     Point point = e.getPoint();
                     int selectedIndex = table.locationToIndex(point);
                     if (selectedIndex >= 0) {
@@ -148,7 +148,7 @@ public class WelcomeController {
         dialog.getRecentList().addMouseListener(new PopupMouseAdapter() {
             @Override
             protected void showPopup(MouseEvent e) {
-                JList<RecentEntry> table = (JList<RecentEntry>) e.getSource();
+                JList<RecentEntry> table = dialog.getRecentList();
                 Point point = e.getPoint();
                 int selectedIndex = table.locationToIndex(point);
                 if (selectedIndex >= 0) {

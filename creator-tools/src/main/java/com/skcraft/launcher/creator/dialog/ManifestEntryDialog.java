@@ -19,6 +19,7 @@ public class ManifestEntryDialog extends JDialog {
 
     @Getter private final JSpinner prioritySpinner = new JSpinner();
     @Getter private final JTextField newsUrlText = new JTextField(30);
+    @Getter private final JTextField iconUrlText = new JTextField(30);
     @Getter private final JTextArea gameKeysText = new JTextArea(5, 30);
     @Getter private final JCheckBox includeCheck = new JCheckBox("Include in package listing");
 
@@ -40,7 +41,9 @@ public class ManifestEntryDialog extends JDialog {
 
         prioritySpinner.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         newsUrlText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
+        iconUrlText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         gameKeysText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
+        SwingHelper.enableSpinnerMouseWheel(prioritySpinner);
 
         JPanel container = new JPanel();
         container.setLayout(new MigLayout("insets dialog"));
@@ -53,6 +56,9 @@ public class ManifestEntryDialog extends JDialog {
 
         container.add(new JLabel("News URL:"));
         container.add(newsUrlText, "span");
+
+        container.add(new JLabel("Icon URL:"));
+        container.add(iconUrlText, "span");
 
         container.add(new JLabel("Game Keys:"));
         container.add(SwingHelper.wrapScrollPane(gameKeysText), "span");

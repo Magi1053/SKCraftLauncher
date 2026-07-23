@@ -6,16 +6,29 @@ import com.skcraft.launcher.util.Environment;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class LinuxRuntimeFinder implements PlatformRuntimeFinder {
 	@Override
-	public Set<File> getLauncherDirectories(Environment env) {
-		return ImmutableSet.of(new File(System.getenv("HOME"), ".minecraft"));
+	public List<JavaRuntime> getSystemRuntimes(Environment env) {
+		ArrayList<JavaRuntime> entries = Lists.newArrayList();
+
+		entries.addAll(MinecraftJavaFinder.scanLauncherDirectories(env,
+				ImmutableSet.of(new File(System.getenv("HOME"), ".minecraft"))));
+
+		for (File candidate : getCandidateJavaLocations()) {
+			JavaRuntime runtime = JavaRuntimeFinder.getRuntimeFromPath(candidate);
+			if (runtime != null) {
+				entries.add(runtime);
+			}
+		}
+
+		return entries;
 	}
 
-	@Override
-	public List<File> getCandidateJavaLocations() {
+	private static List<File> getCandidateJavaLocations() {
 		ArrayList<File> entries = Lists.newArrayList();
 
 		String javaHome = System.getenv("JAVA_HOME");
@@ -35,10 +48,5 @@ public class LinuxRuntimeFinder implements PlatformRuntimeFinder {
 		}
 
 		return entries;
-	}
-
-	@Override
-	public List<JavaRuntime> getExtraRuntimes() {
-		return Collections.emptyList();
 	}
 }

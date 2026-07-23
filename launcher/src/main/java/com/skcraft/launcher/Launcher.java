@@ -192,6 +192,21 @@ public final class Launcher {
     }
 
     /**
+     * Get the number of simultaneous file downloads.
+     *
+     * @return configured thread count
+     */
+    public int getDownloadThreads() {
+        String value = getProperties().getProperty("downloadThreads", "32");
+        try {
+            return Math.max(1, Math.min(128, Integer.parseInt(value)));
+        } catch (NumberFormatException e) {
+            log.log(Level.WARNING, "Invalid downloadThreads value: " + value);
+            return 32;
+        }
+    }
+
+    /**
      * Get the directory to store temporarily extracted files.
      *
      * @return the directory

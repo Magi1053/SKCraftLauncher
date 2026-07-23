@@ -96,25 +96,10 @@ public class Manifest extends BaseManifest {
     }
 
     public void update(Instance instance) {
-        LaunchModifier modifier = getLaunchModifier();
-        int delta = 0;
+        LaunchModifier previousEffective = instance.getLaunchModifier();
+        LaunchModifier newEffective = MemorySettings.computeEffectiveLaunchModifier(getLaunchModifier(), features);
 
-        for (Feature feature : features) {
-            if (feature != null && feature.isSelected() && feature.getMaxMemoryDelta() > 0) {
-                delta += feature.getMaxMemoryDelta();
-            }
-        }
-
-        if (delta > 0) {
-            modifier = new LaunchModifier(modifier);
-            modifier.setMinMemory(modifier.getMinMemory() + delta);
-            modifier.setMaxMemory(modifier.getMaxMemory() + delta);
-        }
-
-        instance.setLaunchModifier(modifier);
-
-        if (!instance.isInstalled() || instance.getSettings().getMemorySettings() == null) {
-            MemorySettings.applyFromLaunchModifier(instance, modifier);
-        }
+        MemorySettings.syncDefaultsFromManifest(instance, previousEffective, newEffective);
+        instance.setLaunchModifier(newEffective);
     }
 }

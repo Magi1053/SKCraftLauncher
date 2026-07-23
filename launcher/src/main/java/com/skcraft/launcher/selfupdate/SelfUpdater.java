@@ -30,7 +30,7 @@ public class SelfUpdater implements Callable<File>, ProgressObservable {
     public SelfUpdater(@NonNull Launcher launcher, @NonNull URL url) {
         this.launcher = launcher;
         this.url = url;
-        this.installer = new Installer(launcher.getInstallerDir());
+        this.installer = new Installer(launcher.getInstallerDir(), launcher.getDownloadThreads());
     }
 
     @Override

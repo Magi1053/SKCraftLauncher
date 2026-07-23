@@ -6,6 +6,7 @@
 
 package com.skcraft.launcher.model.modpack;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -13,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class RequireAll implements Condition {
 
     private List<Feature> features = new ArrayList<Feature>();

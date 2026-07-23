@@ -15,6 +15,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.skcraft.concurrency.Deferred;
 import com.skcraft.concurrency.Deferreds;
+import com.skcraft.concurrency.ObservableFuture;
 import com.skcraft.concurrency.SettableProgress;
 import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.InstanceList;
@@ -22,6 +23,7 @@ import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.auth.OfflineSession;
 import com.skcraft.launcher.auth.Session;
 import com.skcraft.launcher.builder.BuilderConfig;
+import com.skcraft.launcher.builder.FeaturePattern;
 import com.skcraft.launcher.builder.FnPatternList;
 import com.skcraft.launcher.creator.Creator;
 import com.skcraft.launcher.creator.controller.task.*;
@@ -40,6 +42,7 @@ import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.PopupMouseAdapter;
 import com.skcraft.launcher.swing.SwingHelper;
 import com.skcraft.launcher.util.MorePaths;
+import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
 import lombok.Getter;
 
@@ -54,9 +57,11 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 public class PackManagerController {
@@ -158,6 +163,9 @@ public class PackManagerController {
                     if (packTableModel.getRowCount() > 0) {
                         table.addRowSelectionInterval(0, 0);
                     }
+
+                    testServer.setListingEntriesSupplier(
+                            () -> workspace != null ? workspace.getPackageListingEntries() : Collections.emptyList());
 
                     return packs;
                 }, SwingExecutor.INSTANCE);
@@ -338,7 +346,7 @@ public class PackManagerController {
                             if (e.isControlDown()) {
                                 SwingHelper.browseDir(optional.get().getDirectory(), frame);
                             } else {
-                                startTest(optional.get(), false);
+                                startTest(optional.get(), false, false);
                             }
                         }
                     }
@@ -480,7 +488,7 @@ public class PackManagerController {
 
             if (optional.isPresent()) {
                 Pack pack = optional.get();
-                startTest(pack, false);
+                startTest(pack, false, false);
             }
         });
 
@@ -489,7 +497,54 @@ public class PackManagerController {
 
             if (optional.isPresent()) {
                 Pack pack = optional.get();
-                startTest(pack, true);
+                startTest(pack, true, false);
+            }
+        });
+
+        frame.getSelectFeaturesMenuItem().addActionListener(e -> {
+            Optional<Pack> optional = getSelectedPack(true);
+
+            if (optional.isPresent()) {
+                Pack pack = optional.get();
+                if (!packHasFeatures(pack)) {
+                    SwingHelper.showMessageDialog(frame,
+                            "This pack has no optional features configured.",
+                            "Optional Features", null, JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+                startTest(pack, false, true);
+            }
+        });
+
+        frame.getVerifyFilesMenuItem().addActionListener(e -> {
+            Optional<Pack> optional = getSelectedPack(true);
+
+            if (optional.isPresent()) {
+                Pack pack = optional.get();
+                findTestInstance(pack, instance -> {
+                    new File(instance.getDir(), "update_cache.json").delete();
+                    instance.setUpdatePending(true);
+                    Persistence.commitAndForget(instance);
+                    startTest(pack, false, false);
+                });
+            }
+        });
+
+        frame.getReinstallModsMenuItem().addActionListener(e -> {
+            Optional<Pack> optional = getSelectedPack(true);
+
+            if (optional.isPresent()) {
+                Pack pack = optional.get();
+                findTestInstance(pack, instance -> {
+                    if (!SwingHelper.confirmDialog(frame, SharedLocale.tr("instance.confirmReinstallMods"),
+                            SharedLocale.tr("confirmTitle"))) {
+                        return;
+                    }
+
+                    ObservableFuture<Instance> future = launcher.getInstanceTasks().hardUpdate(frame, instance);
+                    future.addListener(() -> SwingUtilities.invokeLater(() -> startTest(pack, false, false)),
+                            SwingExecutor.INSTANCE);
+                });
             }
         });
 
@@ -501,40 +556,8 @@ public class PackManagerController {
         frame.getInstanceOptionsMenuItem().addActionListener(e -> {
             Optional<Pack> selectedPack = getSelectedPack(true);
 
-            selectedPack.ifPresent(pack -> {
-                InstanceList.Enumerator instanceList = launcher.getInstances().createEnumerator();
-
-                ListenableFuture<InstanceList> future = executor.submit(instanceList);
-                Futures.addCallback(future, new FutureCallback<InstanceList>() {
-                    @Override
-                    public void onSuccess(InstanceList result) {
-                        Instance found = null;
-
-                        for (Instance instance : result.getInstances()) {
-                            if (instance.getName().equals(pack.getCachedConfig().getName())) {
-                                found = instance;
-                                break;
-                            }
-                        }
-
-                        if (found == null) {
-                            SwingHelper.showErrorDialog(frame, "No instance found for that pack - you need " +
-                                            "to test the pack first.", "Not Found");
-                            return;
-                        }
-
-                        InstanceSettingsDialog.open(frame, launcher, found);
-                    }
-
-                    @Override
-                    public void onFailure(Throwable ignored) {
-                    }
-                }, SwingExecutor.INSTANCE);
-
-                ProgressDialog.showProgress(frame, future, instanceList, "Enumerating instances...",
-                        "Enumerating instances...");
-                SwingHelper.addErrorDialogCallback(frame, future);
-            });
+            selectedPack.ifPresent(pack -> findTestInstance(pack,
+                    instance -> InstanceSettingsDialog.open(frame, launcher, instance)));
         });
 
         frame.getClearInstanceMenuItem().addActionListener(e -> {
@@ -672,6 +695,24 @@ public class PackManagerController {
         menuItem.addActionListener(e -> frame.getInstanceOptionsMenuItem().doClick());
         popup.add(menuItem);
 
+        popup.addSeparator();
+
+        if (packHasFeatures(pack)) {
+            menuItem = new JMenuItem("Optional features...");
+            menuItem.addActionListener(e -> frame.getSelectFeaturesMenuItem().doClick());
+            popup.add(menuItem);
+        }
+
+        menuItem = new JMenuItem("Verify files");
+        menuItem.addActionListener(e -> frame.getVerifyFilesMenuItem().doClick());
+        popup.add(menuItem);
+
+        menuItem = new JMenuItem("Reinstall mods & configs...");
+        menuItem.addActionListener(e -> frame.getReinstallModsMenuItem().doClick());
+        popup.add(menuItem);
+
+        popup.addSeparator();
+
         menuItem = new JMenuItem("Build...");
         menuItem.addActionListener(e -> frame.getBuildMenuItem().doClick());
         popup.add(menuItem);
@@ -773,7 +814,7 @@ public class PackManagerController {
         }
     }
 
-    private void startTest(Pack pack, boolean online) {
+    private void startTest(Pack pack, boolean online, boolean reselectFeatures) {
         Session session;
 
         if (online) {
@@ -793,7 +834,8 @@ public class PackManagerController {
 
         PackBuilder builder = new PackBuilder(pack, webRoot, version, "staging.json", false, false);
         InstanceList.Enumerator enumerator = launcher.getInstances().createEnumerator();
-        TestLauncher instanceLauncher = new TestLauncher(launcher, frame, pack.getCachedConfig().getName(), session);
+        TestLauncher instanceLauncher = new TestLauncher(launcher, frame, pack.getCachedConfig().getName(),
+                session, reselectFeatures);
 
         SettableProgress progress = new SettableProgress(builder);
 
@@ -808,6 +850,50 @@ public class PackManagerController {
 
         ProgressDialog.showProgress(frame, deferred, progress, "Setting up test instance...", "Preparing files for launch...");
         SwingHelper.addErrorDialogCallback(frame, deferred);
+    }
+
+    private boolean packHasFeatures(Pack pack) {
+        BuilderConfig config = pack.getCachedConfig();
+        if (config == null) {
+            return false;
+        }
+        List<FeaturePattern> features = config.getFeatures();
+        return features != null && !features.isEmpty();
+    }
+
+    private void findTestInstance(Pack pack, Consumer<Instance> callback) {
+        InstanceList.Enumerator instanceList = launcher.getInstances().createEnumerator();
+
+        ListenableFuture<InstanceList> future = executor.submit(instanceList);
+        Futures.addCallback(future, new FutureCallback<InstanceList>() {
+            @Override
+            public void onSuccess(InstanceList result) {
+                Instance found = null;
+
+                for (Instance instance : result.getInstances()) {
+                    if (instance.getName().equals(pack.getCachedConfig().getName())) {
+                        found = instance;
+                        break;
+                    }
+                }
+
+                if (found == null) {
+                    SwingHelper.showErrorDialog(frame, "No instance found for that pack - you need " +
+                                    "to test the pack first.", "Not Found");
+                    return;
+                }
+
+                callback.accept(found);
+            }
+
+            @Override
+            public void onFailure(Throwable ignored) {
+            }
+        }, SwingExecutor.INSTANCE);
+
+        ProgressDialog.showProgress(frame, future, instanceList, "Enumerating instances...",
+                "Enumerating instances...");
+        SwingHelper.addErrorDialogCallback(frame, future);
     }
 
     private void buildPack(Pack pack) {

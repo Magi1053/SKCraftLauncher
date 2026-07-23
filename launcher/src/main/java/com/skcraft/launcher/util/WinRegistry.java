@@ -64,4 +64,15 @@ public class WinRegistry {
     public static List<String> readStringSubKeys(WinReg.HKEY hkey, String key) {
         return ImmutableList.copyOf(Advapi32Util.registryGetKeys(hkey, key));
     }
+
+    /**
+     * Check whether a registry key exists.
+     *
+     * @param hkey Hive key
+     * @param key Registry path
+     * @return true if the key exists
+     */
+    public static boolean keyExists(WinReg.HKEY hkey, String key) {
+        return Advapi32Util.registryKeyExists(hkey, key);
+    }
 }

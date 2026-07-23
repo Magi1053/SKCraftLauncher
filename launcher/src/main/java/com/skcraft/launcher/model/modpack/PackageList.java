@@ -6,11 +6,13 @@
 
 package com.skcraft.launcher.model.modpack;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.util.List;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PackageList {
 
     public static final int MIN_VERSION = 1;

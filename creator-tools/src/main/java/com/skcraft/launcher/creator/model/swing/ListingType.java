@@ -61,6 +61,9 @@ public enum ListingType {
                 if (info.getNewsUrl() != null) {
                     builder.append("    'newsUrl' => '").append(escape(info.getNewsUrl())).append("',\r\n");
                 }
+                if (info.getIconUrl() != null) {
+                    builder.append("    'iconUrl' => '").append(escape(info.getIconUrl())).append("',\r\n");
+                }
                 builder.append(");\r\n\r\n");
             }
 

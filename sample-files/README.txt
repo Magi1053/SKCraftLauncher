@@ -23,10 +23,14 @@ java -jar ../launcher-builder/build/libs/launcher-builder-4.2.3-SNAPSHOT-all.jar
 launcher.properties
 ===================
 
-If you had uploaded the contents of upload/ to http://example.com/launcher/, you would make launcher.properties look like this:
+If you had uploaded the contents of upload/ to http://example.com/launcher/, you would set your update URL in launcher.properties:
+
+selfUpdateUrl=http://example.com/launcher/latest.json
+
+The bootstrap reads that value from the launcher JAR when one is installed, or from launcher.properties packaged into launcher-bootstrap.jar at build time.
+You would also configure other launcher URLs in launcher.properties, for example:
 
 newsUrl=http://example.com/launcher/news.html?version=%s
 packageListUrl=http://example.com/launcher/packages.php?key=%s
-selfUpdateUrl=http://example.com/launcher/latest.json
 
-(note: it uses the .php version here)
+(note: packageListUrl uses the .php version here)

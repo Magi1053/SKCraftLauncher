@@ -25,12 +25,12 @@ import com.skcraft.launcher.model.minecraft.JavaVersion;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
 import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.SwingHelper;
+import com.skcraft.launcher.update.InstanceUpdateCheck;
 import com.skcraft.launcher.update.Updater;
 import com.skcraft.launcher.update.runtime.JavaVersionResolver;
 import com.skcraft.launcher.update.runtime.RuntimeInstallTask;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.apache.commons.io.FileUtils;
 
@@ -40,7 +40,6 @@ import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.Date;
-import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,8 +65,6 @@ public class LaunchSupervisor {
         final LaunchListener listener = options.getListener();
 
         try {
-            boolean update = options.getUpdatePolicy().isUpdateEnabled() && instance.isUpdatePending();
-
             // Store last access date
             Date now = new Date();
             instance.setLastAccessed(now);
@@ -86,54 +83,90 @@ public class LaunchSupervisor {
                 }
             }
 
-            // If we have to update, we have to update
-            if (!instance.isInstalled()) {
-                update = true;
-            }
+            if (instance.getManifestURL() != null
+                    && shouldCheckForUpdates(options.getUpdatePolicy(), session)) {
+                InstanceUpdateCheck check = new InstanceUpdateCheck(launcher, instance);
+                ObservableFuture<Instance> checkFuture = new ObservableFuture<Instance>(
+                        launcher.getExecutor().submit(check), check);
 
-            if (update) {
-                // Execute the updater
-                Updater updater = new Updater(launcher, instance);
-                updater.setOnline(options.getUpdatePolicy() == UpdatePolicy.ALWAYS_UPDATE || session.isOnline());
-                ObservableFuture<Instance> future = new ObservableFuture<Instance>(
-                        launcher.getExecutor().submit(updater), updater);
+                ProgressDialog.showProgress(window, checkFuture,
+                        SharedLocale.tr("launcher.updateCheckTitle"),
+                        SharedLocale.tr("launcher.updateCheckStatus"));
+                SwingHelper.addErrorDialogCallback(window, checkFuture);
 
-                // Show progress
-                ProgressDialog.showProgress(window, future, SharedLocale.tr("launcher.updatingTitle"), tr("launcher.updatingStatus", instance.getTitle()));
-                SwingHelper.addErrorDialogCallback(window, future);
-
-                // Update the list of instances after updating
-                future.addListener(new Runnable() {
-                    @Override
-                    public void run() {
-                        SwingUtilities.invokeLater(new Runnable() {
-                            @Override
-                            public void run() {
-                                listener.instancesUpdated();
-                            }
-                        });
-                    }
-                }, SwingExecutor.INSTANCE);
-
-                // On success, launch also
-                Futures.addCallback(future, new FutureCallback<Instance>() {
+                Futures.addCallback(checkFuture, new FutureCallback<Instance>() {
                     @Override
                     public void onSuccess(Instance result) {
-                        launchInstance(window, instance, session, listener, true);
+                        continueAfterUpdateCheck(options, session);
                     }
 
                     @Override
                     public void onFailure(Throwable t) {
+                        log.log(Level.WARNING,
+                                "Unable to check for an update for " + instance.getTitle(), t);
                     }
                 }, SwingExecutor.INSTANCE);
             } else {
-                boolean runtimeDownloadAllowed = options.getUpdatePolicy() == UpdatePolicy.ALWAYS_UPDATE
-                        || (options.getUpdatePolicy().isUpdateEnabled() && session.isOnline());
-                launchInstance(window, instance, session, listener, runtimeDownloadAllowed);
+                continueAfterUpdateCheck(options, session);
             }
         } catch (ArrayIndexOutOfBoundsException e) {
             SwingHelper.showErrorDialog(window, SharedLocale.tr("launcher.noInstanceError"), SharedLocale.tr("launcher.noInstanceTitle"));
         }
+    }
+
+    private void continueAfterUpdateCheck(LaunchOptions options, Session session) {
+        final Window window = options.getWindow();
+        final Instance instance = options.getInstance();
+        final LaunchListener listener = options.getListener();
+
+        boolean update = shouldCheckForUpdates(options.getUpdatePolicy(), session)
+                && instance.isUpdatePending();
+        if (!instance.isInstalled()) {
+            update = true;
+        }
+
+        if (update) {
+            Updater updater = new Updater(launcher, instance);
+            updater.setOnline(options.getUpdatePolicy() == UpdatePolicy.ALWAYS_UPDATE || session.isOnline());
+            updater.setPromptForFeatures(options.isReselectFeatures());
+            ObservableFuture<Instance> future = new ObservableFuture<Instance>(
+                    launcher.getExecutor().submit(updater), updater);
+
+            ProgressDialog.showProgress(window, future, SharedLocale.tr("launcher.updatingTitle"), tr("launcher.updatingStatus", instance.getTitle()));
+            SwingHelper.addErrorDialogCallback(window, future);
+
+            future.addListener(new Runnable() {
+                @Override
+                public void run() {
+                    SwingUtilities.invokeLater(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.instancesUpdated();
+                        }
+                    });
+                }
+            }, SwingExecutor.INSTANCE);
+
+            Futures.addCallback(future, new FutureCallback<Instance>() {
+                @Override
+                public void onSuccess(Instance result) {
+                    launchInstance(window, instance, session, listener, true);
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                }
+            }, SwingExecutor.INSTANCE);
+        } else {
+            boolean runtimeDownloadAllowed = options.getUpdatePolicy() == UpdatePolicy.ALWAYS_UPDATE
+                    || (options.getUpdatePolicy().isUpdateEnabled() && session.isOnline());
+            launchInstance(window, instance, session, listener, runtimeDownloadAllowed);
+        }
+    }
+
+    static boolean shouldCheckForUpdates(UpdatePolicy policy, Session session) {
+        return policy == UpdatePolicy.ALWAYS_UPDATE
+                || policy == UpdatePolicy.UPDATE_IF_SESSION_ONLINE && session.isOnline();
     }
 
     private void launchInstance(Window window, Instance instance, Session session,
@@ -292,22 +325,53 @@ public class LaunchSupervisor {
                 tr("launcher.launchingStatus", instance.getTitle()));
     }
 
-
-    @RequiredArgsConstructor
-    static class MemoryVerifier implements BiFunction<Integer, Integer, Runner.MemoryVerificationResult> {
+    public static class MemoryVerifier implements BiFunction<Integer, Integer, Runner.MemoryVerificationResult> {
         private final Instance instance;
+
+        public MemoryVerifier(Instance instance) {
+            this.instance = instance;
+        }
+
+        static void showInsufficientSystemMemory(Instance instance, int requiredMb, int systemCapMb) {
+            runOnEdt(() -> SwingHelper.showErrorDialog(null,
+                    tr("runner.insufficientSystemMemory",
+                            instance.getTitle(),
+                            MemorySettings.formatMemoryGb(requiredMb),
+                            MemorySettings.formatMemoryGb(systemCapMb)),
+                    tr("launcher.insufficientSystemMemoryTitle")));
+        }
+
+        static void showInstanceMemoryExceedsSystem(Instance instance, int configuredMb, int systemCapMb) {
+            runOnEdt(() -> SwingHelper.showErrorDialog(null,
+                    tr("runner.instanceMemoryExceedsSystem",
+                            instance.getTitle(),
+                            MemorySettings.formatMemoryGb(configuredMb),
+                            MemorySettings.formatMemoryGb(systemCapMb)),
+                    tr("launcher.insufficientSystemMemoryTitle")));
+        }
+
+        private static void runOnEdt(Runnable action) {
+            ListenableFuture<?> fut = SwingExecutor.INSTANCE.submit(action);
+            try {
+                fut.get();
+            } catch (ExecutionException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
 
         @Override
         public Runner.MemoryVerificationResult apply(Integer currentMaxMemory, Integer requiredMaxMemory) {
             ListenableFuture<Runner.MemoryVerificationResult> fut = SwingExecutor.INSTANCE.submit(() -> {
-                Object[] options = new Object[]{
+                Object[] options = new Object[] {
                         tr("button.cancel"),
                         tr("button.increaseMemory"),
                         tr("button.launchAnyway"),
                 };
 
                 String message = tr("runner.insufficientMemory",
-                        instance.getTitle(), formatMemoryGb(requiredMaxMemory), formatMemoryGb(currentMaxMemory));
+                        instance.getTitle(),
+                        MemorySettings.formatMemoryGb(requiredMaxMemory),
+                        MemorySettings.formatMemoryGb(currentMaxMemory));
                 int picked = JOptionPane.showOptionDialog(null,
                         SwingHelper.htmlWrap(message),
                         tr("launcher.insufficientMemoryTitle"),
@@ -331,10 +395,6 @@ public class LaunchSupervisor {
             } catch (ExecutionException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
-        }
-
-        private static String formatMemoryGb(int memoryMb) {
-            return String.format(Locale.US, memoryMb % 1024 == 0 ? "%.0f" : "%.1f", memoryMb / 1024.0);
         }
     }
 }

@@ -8,65 +8,70 @@ package com.skcraft.launcher.launch.runtime;
 
 import com.skcraft.launcher.model.minecraft.JavaVersion;
 import com.skcraft.launcher.util.Environment;
-import lombok.extern.java.Log;
 
 import java.io.File;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * Finds the best Java runtime to use.
  */
-@Log
 public final class JavaRuntimeFinder {
+
+    private static volatile List<JavaRuntime> cachedRuntimes;
 
     private JavaRuntimeFinder() {
     }
 
     /**
      * Get all available Java runtimes on the system
+     *
      * @return List of available Java runtimes sorted by newest first
      */
     public static List<JavaRuntime> getAvailableRuntimes() {
-        Environment env = Environment.getInstance();
-        PlatformRuntimeFinder runtimeFinder = getRuntimeFinder(env);
-
-        if (runtimeFinder == null) {
-            return Collections.emptyList();
+        List<JavaRuntime> cached = cachedRuntimes;
+        if (cached != null) {
+            return cached;
         }
 
-        // Add Minecraft javas
-        List<JavaRuntime> mcRuntimes = MinecraftJavaFinder.scanLauncherDirectories(env,
-                runtimeFinder.getLauncherDirectories(env));
-        Set<JavaRuntime> entries = new HashSet<>(mcRuntimes);
+        synchronized (JavaRuntimeFinder.class) {
+            if (cachedRuntimes != null) {
+                return cachedRuntimes;
+            }
 
-        // Add system Javas
-        runtimeFinder.getCandidateJavaLocations().stream()
-                .map(JavaRuntimeFinder::getRuntimeFromPath)
-                .filter(Objects::nonNull)
-                .forEach(entries::add);
+            Environment env = Environment.getInstance();
+            PlatformRuntimeFinder runtimeFinder = getRuntimeFinder(env);
 
-        // Add extra runtimes
-        entries.addAll(runtimeFinder.getExtraRuntimes());
+            if (runtimeFinder == null) {
+                cachedRuntimes = Collections.emptyList();
+                return cachedRuntimes;
+            }
 
-        return entries.stream().sorted().collect(Collectors.toList());
+            cachedRuntimes = Collections.unmodifiableList(
+                    runtimeFinder.getSystemRuntimes(env).stream()
+                            .distinct() // JavaRuntime.equals is by dir
+                            .sorted()
+                            .collect(Collectors.toList()));
+            return cachedRuntimes;
+        }
     }
 
     /**
      * Find the best runtime for a given Java version
+     *
      * @param targetVersion Version to match
      * @return Java runtime if available, empty Optional otherwise
      */
     public static Optional<JavaRuntime> findBestJavaRuntime(JavaVersion targetVersion) {
-        List<JavaRuntime> entries = getAvailableRuntimes();
-
-        return entries.stream().sorted()
+        return getAvailableRuntimes().stream()
                 .filter(runtime -> runtime.getMajorVersion() == targetVersion.getMajorVersion())
                 .findFirst();
     }
 
     public static Optional<JavaRuntime> findAnyJavaRuntime() {
-        return getAvailableRuntimes().stream().sorted().findFirst();
+        return getAvailableRuntimes().stream().findFirst();
     }
 
     public static JavaRuntime getRuntimeFromPath(String path) {

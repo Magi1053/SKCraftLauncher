@@ -18,4 +18,6 @@ public interface Downloader extends ProgressObservable {
     File download(List<URL> urls, String key, long size, String name);
 
     File download(URL url, String key, long size, String name);
+
+    void download(List<URL> urls, File destination, long size, String name);
 }

@@ -11,26 +11,17 @@ import lombok.extern.java.Log;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 
 @Log
 public class MacRuntimeFinder implements PlatformRuntimeFinder {
 	@Override
-	public Set<File> getLauncherDirectories(Environment env) {
-		return ImmutableSet.of(new File(System.getenv("HOME"), "Library/Application Support/minecraft"));
-	}
-
-	@Override
-	public List<File> getCandidateJavaLocations() {
-		return Collections.emptyList();
-	}
-
-	@Override
-	public List<JavaRuntime> getExtraRuntimes() {
+	public List<JavaRuntime> getSystemRuntimes(Environment env) {
 		ArrayList<JavaRuntime> entries = Lists.newArrayList();
+
+		entries.addAll(MinecraftJavaFinder.scanLauncherDirectories(env,
+				ImmutableSet.of(new File(System.getenv("HOME"), "Library/Application Support/minecraft"))));
 
 		try {
 			Process p = Runtime.getRuntime().exec("/usr/libexec/java_home -X");
@@ -41,8 +32,7 @@ public class MacRuntimeFinder implements PlatformRuntimeFinder {
 				entries.add(new JavaRuntime(
 						new File(dict.objectForKey("JVMHomePath").toString()).getAbsoluteFile(),
 						dict.objectForKey("JVMVersion").toString(),
-						isArch64Bit(dict.objectForKey("JVMArch").toString())
-				));
+						isArch64Bit(dict.objectForKey("JVMArch").toString())));
 			}
 		} catch (Throwable err) {
 			log.log(Level.WARNING, "Failed to parse java_home command", err);

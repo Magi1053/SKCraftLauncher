@@ -11,6 +11,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.skcraft.concurrency.ObservableFuture;
 import com.skcraft.launcher.Launcher;
+import com.skcraft.launcher.LauncherException;
 import com.skcraft.launcher.dialog.ProgressDialog;
 import com.skcraft.launcher.selfupdate.LatestVersionInfo;
 import com.skcraft.launcher.selfupdate.SelfUpdater;
@@ -19,6 +20,7 @@ import com.skcraft.launcher.swing.SwingHelper;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
 import lombok.Getter;
+import lombok.extern.java.Log;
 
 import javax.swing.*;
 import javax.swing.event.SwingPropertyChangeSupport;
@@ -26,7 +28,10 @@ import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.net.URL;
+import java.util.concurrent.CancellationException;
+import java.util.logging.Level;
 
+@Log
 public class UpdateManager {
 
     @Getter
@@ -63,11 +68,9 @@ public class UpdateManager {
 
             @Override
             public void onFailure(Throwable t) {
-                // Error handler attached below.
+                logSelfUpdateCheckFailure(t);
             }
         }, SwingExecutor.INSTANCE);
-
-        SwingHelper.addErrorDialogCallback(window, future);
     }
 
     public void performUpdate(final Window window) {
@@ -109,5 +112,16 @@ public class UpdateManager {
         this.pendingUpdate = url;
     }
 
+    private static void logSelfUpdateCheckFailure(Throwable t) {
+        if (t instanceof InterruptedException || t instanceof CancellationException) {
+            return;
+        }
+
+        Throwable cause = t instanceof LauncherException ? t.getCause() : t;
+        if (cause == null) {
+            cause = t;
+        }
+        log.log(Level.WARNING, "Self-update check failed", cause);
+    }
 
 }

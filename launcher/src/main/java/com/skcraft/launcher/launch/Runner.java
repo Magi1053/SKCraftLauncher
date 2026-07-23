@@ -67,6 +67,8 @@ public class Runner implements Callable<Process>, ProgressObservable {
     private JavaProcessBuilder builder;
     private AssetsRoot assetsRoot;
     private FeatureList.Mutable featureList;
+    private int resolvedWindowWidth;
+    private int resolvedWindowHeight;
 
     /**
      * Create a new instance launcher.
@@ -154,7 +156,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         addLegacyArgs();
 
         callLaunchModifier();
-        verifyMemoryRequirement();
+        verifyMemory();
 
         ProcessBuilder processBuilder = new ProcessBuilder(builder.buildCommand());
         processBuilder.directory(instance.getContentDir());
@@ -173,41 +175,14 @@ public class Runner implements Callable<Process>, ProgressObservable {
         instance.modify(builder);
     }
 
-    private void verifyMemoryRequirement() {
-        if (instance.getLaunchModifier() == null || memoryRequirementMismatch == null) {
-            return;
+    private void verifyMemory() {
+        if (!MemoryRequirements.verifyInstanceMemory(instance, memoryRequirementMismatch)) {
+            throw new CancellationException("Launch cancelled: memory requirements were not met.");
         }
 
-        int requiredMaxMemory = instance.getLaunchModifier().getMaxMemory();
-        int currentMaxMemory = builder.getMaxMemory();
-
-        if (requiredMaxMemory <= 0 || currentMaxMemory >= requiredMaxMemory) {
-            return;
-        }
-
-        MemoryVerificationResult result = memoryRequirementMismatch.apply(currentMaxMemory, requiredMaxMemory);
-        if (result == MemoryVerificationResult.CANCEL) {
-            throw new CancellationException("Launch cancelled by user.");
-        }
-
-        if (result == MemoryVerificationResult.UPDATE_INSTANCE_SETTINGS) {
-            MemorySettings memorySettings = instance.getSettings().getMemorySettings();
-            if (memorySettings == null) {
-                memorySettings = new MemorySettings();
-                instance.getSettings().setMemorySettings(memorySettings);
-            }
-
-            int requiredMinMemory = instance.getLaunchModifier().getMinMemory();
-            memorySettings.setMaxMemory(requiredMaxMemory);
-            memorySettings.setMinMemory(requiredMinMemory > 0 ? requiredMinMemory : requiredMaxMemory);
-            if (memorySettings.getMinMemory() > memorySettings.getMaxMemory()) {
-                memorySettings.setMinMemory(memorySettings.getMaxMemory());
-            }
-            Persistence.commitAndForget(instance);
-
-            builder.setMinMemory(memorySettings.getMinMemory());
-            builder.setMaxMemory(memorySettings.getMaxMemory());
-        }
+        MemorySettings.Resolved memory = MemorySettings.resolve(instance);
+        builder.setMinMemory(memory.getMinMemory());
+        builder.setMaxMemory(memory.getMaxMemory());
     }
 
     public enum MemoryVerificationResult {
@@ -384,12 +359,13 @@ public class Runner implements Callable<Process>, ProgressObservable {
     }
 
     /**
-     * Add window arguments.
+     * Add window size args from configuration.
      */
     private void addWindowArgs() {
-        int width = config.getWindowWidth();
+        resolvedWindowWidth = config.getWindowWidth();
+        resolvedWindowHeight = config.getWindowHeight();
 
-        if (width >= 10) {
+        if (resolvedWindowWidth >= 10) {
             featureList.addFeature("has_custom_resolution", true);
         }
     }
@@ -409,9 +385,9 @@ public class Runner implements Callable<Process>, ProgressObservable {
             if (featureList.hasFeature("has_custom_resolution")) {
                 List<String> args = builder.getArgs();
                 args.add("--width");
-                args.add(String.valueOf(config.getWindowWidth()));
+                args.add(String.valueOf(resolvedWindowWidth));
                 args.add("--height");
-                args.add(String.valueOf(config.getWindowHeight()));
+                args.add(String.valueOf(resolvedWindowHeight));
             }
 
             // Add old platform hacks that the new manifests already specify
@@ -452,8 +428,8 @@ public class Runner implements Callable<Process>, ProgressObservable {
         map.put("assets_root", launcher.getAssets().getDir().getAbsolutePath());
         map.put("assets_index_name", versionManifest.getAssetId());
 
-        map.put("resolution_width", String.valueOf(config.getWindowWidth()));
-        map.put("resolution_height", String.valueOf(config.getWindowHeight()));
+        map.put("resolution_width", String.valueOf(resolvedWindowWidth));
+        map.put("resolution_height", String.valueOf(resolvedWindowHeight));
 
         map.put("launcher_name", launcher.getTitle());
         map.put("launcher_version", launcher.getVersion());

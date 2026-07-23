@@ -21,6 +21,8 @@ import lombok.extern.java.Log;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.border.AbstractBorder;
+import javax.swing.border.Border;
 import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
@@ -101,7 +103,7 @@ public final class SwingHelper {
     /**
      * Opens a system web browser for the given URL.
      *
-     * @param url the URL
+     * @param url             the URL
      * @param parentComponent the component from which to show any errors
      */
     public static void openURL(@NonNull String url, @NonNull Component parentComponent) {
@@ -114,7 +116,7 @@ public final class SwingHelper {
     /**
      * Opens a system web browser for the given URL.
      *
-     * @param url the URL
+     * @param url             the URL
      * @param parentComponent the component from which to show any errors
      */
     public static void openURL(URL url, Component parentComponent) {
@@ -133,39 +135,46 @@ public final class SwingHelper {
         } catch (UnsupportedOperationException e) {
             if (Environment.detectPlatform() == Platform.LINUX) {
                 // Try xdg-open instead
-                Runtime.getRuntime().exec(new String[]{"xdg-open", url.toString()});
+                Runtime.getRuntime().exec(new String[] { "xdg-open", url.toString() });
             }
         }
     }
 
     /**
-     * Shows an popup error dialog, with potential extra details shown either immediately
+     * Shows an popup error dialog, with potential extra details shown either
+     * immediately
      * or available on the dialog.
      *
-     * @param parentComponent the frame from which the dialog is displayed, otherwise
+     * @param parentComponent the frame from which the dialog is displayed,
+     *                        otherwise
      *                        null to use the default frame
-     * @param message the message to display
-     * @param title the title string for the dialog
-     * @see #showMessageDialog(java.awt.Component, String, String, String, int) for details
+     * @param message         the message to display
+     * @param title           the title string for the dialog
+     * @see #showMessageDialog(java.awt.Component, String, String, String, int) for
+     *      details
      */
     public static void showErrorDialog(Component parentComponent, @NonNull String message,
-                                       @NonNull String title) {
+            @NonNull String title) {
         showErrorDialog(parentComponent, message, title, null);
     }
 
     /**
-     * Shows an popup error dialog, with potential extra details shown either immediately
+     * Shows an popup error dialog, with potential extra details shown either
+     * immediately
      * or available on the dialog.
      *
-     * @param parentComponent the frame from which the dialog is displayed, otherwise
+     * @param parentComponent the frame from which the dialog is displayed,
+     *                        otherwise
      *                        null to use the default frame
-     * @param message the message to display
-     * @param title the title string for the dialog
-     * @param throwable the exception, or null if there is no exception to show
-     * @see #showMessageDialog(java.awt.Component, String, String, String, int) for details
+     * @param message         the message to display
+     * @param title           the title string for the dialog
+     * @param throwable       the exception, or null if there is no exception to
+     *                        show
+     * @see #showMessageDialog(java.awt.Component, String, String, String, int) for
+     *      details
      */
     public static void showErrorDialog(Component parentComponent, @NonNull String message,
-                                       @NonNull String title, Throwable throwable) {
+            @NonNull String title, Throwable throwable) {
         String detailsText = null;
 
         // Get a string version of the exception and use that for
@@ -185,22 +194,26 @@ public final class SwingHelper {
      * Show a message dialog using
      * {@link javax.swing.JOptionPane#showMessageDialog(java.awt.Component, Object, String, int)}.
      *
-     * <p>The dialog will be shown from the Event Dispatch Thread, regardless of the
+     * <p>
+     * The dialog will be shown from the Event Dispatch Thread, regardless of the
      * thread it is called from. In either case, the method will block until the
-     * user has closed the dialog (or dialog creation fails for whatever reason).</p>
+     * user has closed the dialog (or dialog creation fails for whatever reason).
+     * </p>
      *
-     * @param parentComponent the frame from which the dialog is displayed, otherwise
+     * @param parentComponent the frame from which the dialog is displayed,
+     *                        otherwise
      *                        null to use the default frame
-     * @param message the message to display
-     * @param title the title string for the dialog
-     * @param messageType see {@link javax.swing.JOptionPane#showMessageDialog(java.awt.Component, Object, String, int)}
-     *                    for available message types
+     * @param message         the message to display
+     * @param title           the title string for the dialog
+     * @param messageType     see
+     *                        {@link javax.swing.JOptionPane#showMessageDialog(java.awt.Component, Object, String, int)}
+     *                        for available message types
      */
     public static void showMessageDialog(final Component parentComponent,
-                                         @NonNull final String message,
-                                         @NonNull final String title,
-                                         final String detailsText,
-                                         final int messageType) {
+            @NonNull final String message,
+            @NonNull final String title,
+            final String detailsText,
+            final int messageType) {
 
         if (SwingUtilities.isEventDispatchThread()) {
             String htmlMessage = htmlWrap(message);
@@ -250,17 +263,16 @@ public final class SwingHelper {
      * Asks the user a binary yes or no question.
      *
      * @param parentComponent the component
-     * @param message the message to display
-     * @param title the title string for the dialog
+     * @param message         the message to display
+     * @param title           the title string for the dialog
      * @return whether 'yes' was selected
      */
     public static boolean confirmDialog(final Component parentComponent,
-                                        @NonNull final String message,
-                                        @NonNull final String title) {
+            @NonNull final String message,
+            @NonNull final String title) {
         if (SwingUtilities.isEventDispatchThread()) {
             return JOptionPane.showConfirmDialog(
-                    parentComponent, message, title, JOptionPane.YES_NO_OPTION) ==
-                    JOptionPane.YES_OPTION;
+                    parentComponent, message, title, JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION;
         } else {
             // Use an AtomicBoolean to pass the result back from the
             // Event Dispatcher Thread
@@ -288,7 +300,7 @@ public final class SwingHelper {
      *
      * @param component component
      */
-    public static void equalWidth(Component ... component) {
+    public static void equalWidth(Component... component) {
         double widest = 0;
         for (Component comp : component) {
             Dimension dim = comp.getPreferredSize();
@@ -308,7 +320,7 @@ public final class SwingHelper {
      *
      * @param components list of components
      */
-    public static void removeOpaqueness(@NonNull Component ... components) {
+    public static void removeOpaqueness(@NonNull Component... components) {
         for (Component component : components) {
             if (component instanceof JComponent) {
                 JComponent jComponent = (JComponent) component;
@@ -370,8 +382,11 @@ public final class SwingHelper {
     /**
      * Focus a component.
      *
-     * <p>The focus call happens in {@link javax.swing.SwingUtilities#invokeLater(Runnable)}.</p>
-     * 
+     * <p>
+     * The focus call happens in
+     * {@link javax.swing.SwingUtilities#invokeLater(Runnable)}.
+     * </p>
+     *
      * @param component the component
      */
     public static void focusLater(@NonNull final Component component) {
@@ -476,16 +491,6 @@ public final class SwingHelper {
         }
     }
 
-    public static boolean setLookAndFeel(String lookAndFeel) {
-        try {
-            UIManager.setLookAndFeel(lookAndFeel);
-            return true;
-        } catch (Exception e) {
-            log.log(Level.WARNING, "Failed to set look and feel to " + lookAndFeel, e);
-            return false;
-        }
-    }
-
     public static void setSwingProperties(String appName) {
         UIManager.getDefaults().put("SplitPane.border", BorderFactory.createEmptyBorder());
         System.setProperty("com.apple.mrj.application.apple.menu.about.name", appName);
@@ -498,7 +503,8 @@ public final class SwingHelper {
     }
 
     /**
-     * Background color used by list/table panes such as the instances panel.
+     * 1px line border that reads {@code Component.borderColor} on each paint
+     * so theme switches do not need {@code updateUI} border re-apply.
      */
     public static Border uiLineBorder() {
         return new AbstractBorder() {
@@ -521,6 +527,9 @@ public final class SwingHelper {
         };
     }
 
+    /**
+     * Background color used by list/table panes such as the instances panel.
+     */
     public static Color tableBackground() {
         return uiColor("Table.background", Color.WHITE);
     }
@@ -536,6 +545,63 @@ public final class SwingHelper {
     public static void styleDialogButton(JButton button) {
         button.setFocusPainted(false);
         updateDialogButtonCursor(button);
+    }
+
+    /**
+     * Keep a min/max spinner pair consistent in real time: raising the minimum
+     * above
+     * the maximum pushes the maximum up to match, and lowering the maximum below
+     * the
+     * minimum pulls the minimum down to match.
+     */
+    public static void linkMinMaxSpinners(final JSpinner minSpinner, final JSpinner maxSpinner) {
+        final AtomicBoolean adjusting = new AtomicBoolean(false);
+        minSpinner.addChangeListener(e -> clampSpinner(adjusting, minSpinner, maxSpinner, true));
+        maxSpinner.addChangeListener(e -> clampSpinner(adjusting, minSpinner, maxSpinner, false));
+    }
+
+    private static void clampSpinner(AtomicBoolean adjusting, JSpinner minSpinner, JSpinner maxSpinner,
+            boolean minChanged) {
+        if (adjusting.get()) {
+            return;
+        }
+        Object minValue = minSpinner.getValue();
+        Object maxValue = maxSpinner.getValue();
+        if (!(minValue instanceof Number) || !(maxValue instanceof Number)) {
+            return;
+        }
+        if (((Number) minValue).doubleValue() <= ((Number) maxValue).doubleValue()) {
+            return;
+        }
+        adjusting.set(true);
+        try {
+            if (minChanged) {
+                maxSpinner.setValue(minValue);
+            } else {
+                minSpinner.setValue(maxValue);
+            }
+        } finally {
+            adjusting.set(false);
+        }
+    }
+
+    /**
+     * Let the given spinners respond to mouse wheel scrolling: wheel up increments,
+     * wheel down decrements, respecting the model's bounds.
+     */
+    public static void enableSpinnerMouseWheel(JSpinner... spinners) {
+        for (final JSpinner spinner : spinners) {
+            spinner.addMouseWheelListener(e -> {
+                if (!spinner.isEnabled() || e.getWheelRotation() == 0) {
+                    return;
+                }
+                SpinnerModel model = spinner.getModel();
+                Object next = e.getWheelRotation() < 0 ? model.getNextValue() : model.getPreviousValue();
+                if (next != null) {
+                    model.setValue(next);
+                }
+            });
+        }
     }
 
     public static void updateDialogButtonCursor(JButton button) {

@@ -14,6 +14,8 @@ import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.LauncherException;
 import com.skcraft.launcher.install.Installer;
+import com.skcraft.launcher.launch.LaunchSupervisor;
+import com.skcraft.launcher.launch.MemoryRequirements;
 import com.skcraft.launcher.model.minecraft.ReleaseList;
 import com.skcraft.launcher.model.minecraft.Version;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
@@ -46,7 +48,8 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
     private final Launcher launcher;
     private final Instance instance;
 
-    @Getter @Setter
+    @Getter
+    @Setter
     private boolean online;
 
     private List<URL> librarySources = new ArrayList<URL>();
@@ -57,7 +60,7 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
     public Updater(@NonNull Launcher launcher, @NonNull Instance instance) {
         super(launcher);
 
-        this.installer = new Installer(launcher.getInstallerDir());
+        this.installer = new Installer(launcher.getInstallerDir(), launcher.getDownloadThreads());
         this.launcher = launcher;
         this.instance = instance;
 
@@ -108,9 +111,12 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
      * otherwise we'll have to download the one for the given Minecraft version.
      *
      * BACKWARDS COMPATIBILITY:
-     * Old manifests have an embedded version manifest without the minecraft JARs list present.
-     * If we find a manifest without that jar list, fetch the newer copy from launchermeta and use the list from that.
-     * We can't just replace the manifest outright because library versions might differ and that screws up Runner.
+     * Old manifests have an embedded version manifest without the minecraft JARs
+     * list present.
+     * If we find a manifest without that jar list, fetch the newer copy from
+     * launchermeta and use the list from that.
+     * We can't just replace the manifest outright because library versions might
+     * differ and that screws up Runner.
      */
     private VersionManifest readVersionManifest(Manifest manifest) throws IOException, InterruptedException {
         VersionManifest version = manifest.getVersionManifest();
@@ -139,7 +145,8 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         return version;
     }
 
-    private static VersionManifest fetchVersionManifest(URL url, Manifest manifest) throws IOException, InterruptedException {
+    private static VersionManifest fetchVersionManifest(URL url, Manifest manifest)
+            throws IOException, InterruptedException {
         ReleaseList releases = HttpRequest.get(url)
                 .execute()
                 .expectResponseCode(200)
@@ -158,9 +165,9 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
      * Update the given instance.
      *
      * @param instance the instance
-     * @throws IOException thrown on I/O error
+     * @throws IOException          thrown on I/O error
      * @throws InterruptedException thrown on interruption
-     * @throws ExecutionException thrown on execution error
+     * @throws ExecutionException   thrown on execution error
      */
     protected void update(Instance instance) throws Exception {
         // Mark this instance as local
@@ -171,9 +178,6 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
         log.info("Reading package manifest...");
         progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.readingManifest"));
         Manifest manifest = installPackage(installer, instance);
-
-        // Update instance from manifest
-        manifest.update(instance);
 
         // Read version manifest
         log.info("Reading version manifest...");
@@ -238,6 +242,21 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
     }
 
     @Override
+    protected void onManifestPrepared(Manifest manifest) throws Exception {
+        manifest.update(instance);
+        if (!MemoryRequirements.verifyInstanceMemory(instance, new LaunchSupervisor.MemoryVerifier(instance))) {
+            throw new LauncherException("Update cancelled: insufficient memory",
+                    SharedLocale.tr("updater.updateCancelledInsufficientMemory"));
+        }
+    }
+
+    @Override
+    protected void onVerifyingFiles() {
+        log.info("Verifying package files...");
+        progress = new DefaultProgress(-1, SharedLocale.tr("instanceUpdater.verifyingFiles"));
+    }
+
+    @Override
     public double getProgress() {
         return progress.getProgress();
     }
@@ -246,6 +265,5 @@ public class Updater extends BaseUpdater implements Callable<Instance>, Progress
     public String getStatus() {
         return progress.getStatus();
     }
-
 
 }

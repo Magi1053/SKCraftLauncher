@@ -54,9 +54,11 @@ public class TestServerBuilder {
         rootContext.setContextPath("/");
         rootContext.setHandler(resourceHandler);
 
+        PackagesHandler packagesHandler = new PackagesHandler(mapper, baseDir);
+
         ContextHandler packagesContext = new ContextHandler("/packages.json");
         packagesContext.setAllowNullPathInfo(true);
-        packagesContext.setHandler(new PackagesHandler(mapper, baseDir));
+        packagesContext.setHandler(packagesHandler);
 
         ContextHandler latestContext = new ContextHandler("/latest.json");
         latestContext.setAllowNullPathInfo(true);
@@ -75,7 +77,7 @@ public class TestServerBuilder {
 
         server.addBean(new ErrorHandler());
 
-        return new TestServer(server);
+        return new TestServer(server, packagesHandler);
     }
 
 }

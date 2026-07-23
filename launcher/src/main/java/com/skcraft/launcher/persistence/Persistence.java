@@ -123,11 +123,8 @@ public final class Persistence {
             }
 
             try {
-                object = cls.newInstance();
-            } catch (InstantiationException e1) {
-                throw new RuntimeException(
-                        "Failed to construct object with no-arg constructor", e1);
-            } catch (IllegalAccessException e1) {
+                object = cls.getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException e1) {
                 throw new RuntimeException(
                         "Failed to construct object with no-arg constructor", e1);
             }

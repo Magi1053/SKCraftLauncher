@@ -26,12 +26,18 @@ public class TestLauncher implements Function<InstanceList, Instance>, ProgressO
     private final Window window;
     private final String id;
     private final Session session;
+    private final boolean reselectFeatures;
 
     public TestLauncher(Launcher launcher, Window window, String id, Session session) {
+        this(launcher, window, id, session, false);
+    }
+
+    public TestLauncher(Launcher launcher, Window window, String id, Session session, boolean reselectFeatures) {
         this.launcher = launcher;
         this.window = window;
         this.id = id;
         this.session = session;
+        this.reselectFeatures = reselectFeatures;
     }
 
     private Optional<Instance> findInstance(List<Instance> instances) {
@@ -49,16 +55,22 @@ public class TestLauncher implements Function<InstanceList, Instance>, ProgressO
         Optional<Instance> optional = findInstance(instanceList.getInstances());
 
         if (optional.isPresent()) {
+            Instance instance = optional.get();
+            if (reselectFeatures) {
+                instance.setUpdatePending(true);
+            }
+
             LaunchOptions options = new LaunchOptions.Builder()
-                    .setInstance(optional.get())
+                    .setInstance(instance)
                     .setUpdatePolicy(UpdatePolicy.ALWAYS_UPDATE)
                     .setWindow(window)
                     .setSession(session)
+                    .setReselectFeatures(reselectFeatures)
                     .build();
 
             launcher.getLaunchSupervisor().launch(options);
 
-            return optional.get();
+            return instance;
         } else {
             SwingHelper.showErrorDialog(window,
                     "After generating the necessary files, it appears the modpack can't be found in the " +

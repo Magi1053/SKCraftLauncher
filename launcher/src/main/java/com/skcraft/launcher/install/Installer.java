@@ -34,8 +34,13 @@ public class Installer implements ProgressObservable {
     private transient TaskQueue activeQueue;
 
     public Installer(@NonNull File tempDir) {
+        this(tempDir, 32);
+    }
+
+    public Installer(@NonNull File tempDir, int downloadThreads) {
         this.tempDir = tempDir;
         this.downloader = new HttpDownloader(tempDir);
+        this.downloader.setThreadCount(downloadThreads);
     }
 
     public synchronized void queue(@NonNull InstallTask runnable) {

@@ -11,6 +11,7 @@ import com.skcraft.concurrency.ProgressObservable;
 import com.skcraft.launcher.model.modpack.ManifestInfo;
 import com.skcraft.launcher.model.modpack.PackageList;
 import com.skcraft.launcher.persistence.Persistence;
+import com.skcraft.launcher.update.InstanceUpdateCheck;
 import com.skcraft.launcher.util.HttpRequest;
 import com.skcraft.launcher.util.SharedLocale;
 import lombok.Getter;
@@ -150,24 +151,7 @@ public class InstanceList {
                     for (Instance instance : local) {
                         if (instance.getName().equalsIgnoreCase(manifest.getName())) {
                             foundLocal = true;
-
-                            instance.setName(manifest.getName());
-                            instance.setTitle(manifest.getTitle());
-                            instance.setPriority(manifest.getPriority());
-                            URL url = concat(packagesURL, manifest.getLocation());
-                            instance.setManifestURL(url);
-                            instance.setNewsUrl(manifest.getNewsUrl());
-                            instance.setIconUrl(manifest.getIconUrl());
-
-                            log.info("(" + instance.getName() + ").setManifestURL(" + url + ")");
-
-                            // Check if an update is required
-                            if (instance.getVersion() == null || !instance.getVersion().equals(manifest.getVersion())) {
-                                instance.setUpdatePending(true);
-                                instance.setVersion(manifest.getVersion());
-                                Persistence.commitAndForget(instance);
-                                log.info(instance.getName() + " requires an update to " + manifest.getVersion());
-                            }
+                            InstanceUpdateCheck.applyPackageInfo(instance, manifest, packagesURL);
                         }
                     }
 

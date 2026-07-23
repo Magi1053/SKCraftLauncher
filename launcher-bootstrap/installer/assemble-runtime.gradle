@@ -5,6 +5,7 @@ def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
 def runtimeModules = [
         'java.desktop',
         'java.logging',
+        'java.net.http',
         'java.xml',
         'jdk.crypto.ec',
         'jdk.httpserver',

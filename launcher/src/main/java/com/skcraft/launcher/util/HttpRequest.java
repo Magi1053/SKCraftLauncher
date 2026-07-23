@@ -429,7 +429,16 @@ public class HttpRequest implements Closeable, ProgressObservable {
 
     @Override
     public void close() throws IOException {
-        if (conn != null) conn.disconnect();
+        if (inputStream != null) {
+            inputStream.close();
+            inputStream = null;
+            conn = null;
+        } else if (conn != null) {
+            // No response stream was acquired, so this connection cannot be
+            // returned to HttpURLConnection's keep-alive pool.
+            conn.disconnect();
+            conn = null;
+        }
     }
 
     /**

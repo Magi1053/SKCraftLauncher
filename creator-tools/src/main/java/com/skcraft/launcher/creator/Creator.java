@@ -8,6 +8,7 @@ package com.skcraft.launcher.creator;
 
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.skcraft.launcher.Configuration;
 import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.creator.controller.WelcomeController;
 import com.skcraft.launcher.creator.dialog.WelcomeDialog;
@@ -15,6 +16,7 @@ import com.skcraft.launcher.creator.model.creator.CreatorConfig;
 import com.skcraft.launcher.creator.model.creator.RecentEntry;
 import com.skcraft.launcher.creator.model.creator.Workspace;
 import com.skcraft.launcher.persistence.Persistence;
+import com.skcraft.launcher.swing.LauncherLookAndFeel;
 import com.skcraft.launcher.swing.SwingHelper;
 import lombok.Getter;
 
@@ -75,7 +77,9 @@ public class Creator {
 
         SwingUtilities.invokeAndWait(() -> {
             SwingHelper.setSwingProperties("Modpack Creator");
-            SwingHelper.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            File launcherConfigFile = new File(creator.getDataDir(), "launcher/config.json");
+            Configuration launcherConfig = Persistence.load(launcherConfigFile, Configuration.class);
+            LauncherLookAndFeel.install(launcherConfig.getThemeMode());
 
             try {
                 creator.showWelcome();

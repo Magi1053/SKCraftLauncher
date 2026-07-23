@@ -34,7 +34,10 @@ public class ConfigurationDialog extends JDialog {
 
     private final JPanel tabContainer = new JPanel(new BorderLayout());
     private final JTabbedPane tabbedPane = new JTabbedPane();
-    private final JPanel instanceSettingsPanel = new JPanel(new MigLayout("fillx, wrap 1, ins 12", "[grow]", ""));
+    private static final int SETTINGS_BUTTON_FOCUS_INSET = 8;
+
+    private final JPanel instanceSettingsPanel = new JPanel(new MigLayout(
+            "fillx, wrap 1, ins 12 12 12 " + (12 + SETTINGS_BUTTON_FOCUS_INSET), "[grow]", ""));
     private final JScrollPane instanceSettingsScroll = new JScrollPane(instanceSettingsPanel);
     private final FormPanel gameSettingsPanel = new FormPanel();
     private final JSpinner widthSpinner = new JSpinner();
@@ -111,6 +114,11 @@ public class ConfigurationDialog extends JDialog {
         gameSettingsPanel.addRow(new JLabel(SharedLocale.tr("options.windowHeight")), heightSpinner);
         tabbedPane.addTab(SharedLocale.tr("options.minecraftTab"), SwingHelper.alignTabbedPane(gameSettingsPanel));
 
+        SwingHelper.enableSpinnerMouseWheel(widthSpinner, heightSpinner, proxyPortText);
+        JSpinner.NumberEditor proxyPortEditor = new JSpinner.NumberEditor(proxyPortText, "#");
+        proxyPortEditor.getTextField().setHorizontalAlignment(JTextField.LEFT);
+        proxyPortText.setEditor(proxyPortEditor);
+
         proxySettingsPanel.addRow(useProxyCheck);
         proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyHost")), proxyHostText);
         proxySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.proxyPort")), proxyPortText);
@@ -165,6 +173,12 @@ public class ConfigurationDialog extends JDialog {
 
     }
 
+    private void updateWindowSizeInputState() {
+        boolean enabled = !maximizeWindowCheck.isSelected();
+        widthSpinner.setEnabled(enabled);
+        heightSpinner.setEnabled(enabled);
+    }
+
     private void buildInstanceSettingsPanel() {
         JLabel titleLabel = new JLabel(SharedLocale.tr("options.instancesTitle"));
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
@@ -188,11 +202,14 @@ public class ConfigurationDialog extends JDialog {
 
         for (int i = 0; i < launcher.getInstances().size(); i++) {
             Instance instance = launcher.getInstances().get(i);
-            JButton settingsButton = new JButton(SharedLocale.tr("options.instanceJavaSettings"));
-            settingsButton.addActionListener(e -> {
-                dispose();
-                InstanceSettingsDialog.open(getOwner(), launcher, instance);
-            });
+            JButton settingsButton = null;
+            if (instance.isLocal()) {
+                settingsButton = new JButton(SharedLocale.tr("options.instanceJavaSettings"));
+                settingsButton.addActionListener(e -> {
+                    dispose();
+                    InstanceSettingsDialog.open(getOwner(), launcher, instance);
+                });
+            }
 
             instanceSettingsPanel.add(createInstanceSettingsRow(instance, settingsButton), "growx");
         }
@@ -214,8 +231,11 @@ public class ConfigurationDialog extends JDialog {
 
         JLabel titleLabel = new JLabel(instance.getTitle());
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
-        row.add(titleLabel, "growx");
-        row.add(settingsButton, "spany 2, aligny center, wrap");
+        row.add(titleLabel, settingsButton != null ? "growx" : "growx, wrap");
+        if (settingsButton != null) {
+            row.add(settingsButton, "spany 2, aligny center, gapright "
+                    + SETTINGS_BUTTON_FOCUS_INSET + ", wrap");
+        }
 
         JLabel descriptionLabel = new JLabel(InstanceStatusText.forInstance(instance));
         descriptionLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
@@ -224,16 +244,9 @@ public class ConfigurationDialog extends JDialog {
         return row;
     }
 
-
     /**
      * Save the configuration and close the dialog.
      */
-    private void updateWindowSizeInputState() {
-        boolean enabled = !maximizeWindowCheck.isSelected();
-        widthSpinner.setEnabled(enabled);
-        heightSpinner.setEnabled(enabled);
-    }
-
     public void save() {
         mapper.copyFromSwing();
         config.setThemeMode(themeModeForIndex(themeSelect.getSelectedIndex()));

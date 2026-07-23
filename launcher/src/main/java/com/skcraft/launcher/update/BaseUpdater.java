@@ -28,7 +28,9 @@ import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.FileUtils;
 import com.skcraft.launcher.util.HttpRequest;
 import com.skcraft.launcher.util.SharedLocale;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.java.Log;
 
 import javax.swing.*;
@@ -66,6 +68,10 @@ public abstract class BaseUpdater {
     private final Launcher launcher;
     private final Environment environment = Environment.getInstance();
     private final List<Runnable> executeOnCompletion = new ArrayList<Runnable>();
+
+    @Getter
+    @Setter
+    private boolean promptForFeatures;
 
     protected BaseUpdater(@NonNull Launcher launcher) {
         this.launcher = launcher;
@@ -117,22 +123,36 @@ public abstract class BaseUpdater {
                 }
             }
 
-            SwingUtilities.invokeLater(new Runnable() {
-                @Override
-                public void run() {
+            Set<String> manifestFeatureNames = new HashSet<String>();
+            for (Feature feature : features) {
+                manifestFeatureNames.add(Strings.nullToEmpty(feature.getName()));
+            }
+            boolean featuresChanged = !manifestFeatureNames.equals(featuresCache.getSelected().keySet());
+
+            boolean shouldPrompt = promptForFeatures || featuresChanged;
+            if (shouldPrompt) {
+                SwingUtilities.invokeLater(() -> {
                     new FeatureSelectionDialog(ProgressDialog.getLastDialog(), features, BaseUpdater.this)
                             .setVisible(true);
+                });
+
+                synchronized (this) {
+                    this.wait();
                 }
-            });
-
-            synchronized (this) {
-                this.wait();
             }
 
+            Map<String, Boolean> selected = new HashMap<String, Boolean>();
             for (Feature feature : features) {
-                featuresCache.getSelected().put(Strings.nullToEmpty(feature.getName()), feature.isSelected());
+                selected.put(Strings.nullToEmpty(feature.getName()), feature.isSelected());
             }
+            featuresCache.setSelected(selected);
+
+            // Persist immediately so "chose none" / first choice sticks even if install
+            // fails later
+            writeDataFile(featuresPath, featuresCache);
         }
+
+        onManifestPrepared(manifest);
 
         // Download any extra processing files for each loader
         HashMap<String, LocalLoader> loaders = Maps.newHashMap();
@@ -140,7 +160,8 @@ public abstract class BaseUpdater {
             HashMap<String, DownloadableFile.LocalFile> localFilesMap = Maps.newHashMap();
 
             for (DownloadableFile file : entry.getValue().getDownloadableFiles()) {
-                if (file.getSide() != Side.CLIENT) continue;
+                if (file.getSide() != Side.CLIENT)
+                    continue;
 
                 DownloadableFile.LocalFile localFile = file.download(installer, manifest);
                 localFilesMap.put(localFile.getName(), localFile);
@@ -150,6 +171,7 @@ public abstract class BaseUpdater {
         }
 
         InstallExtras extras = new InstallExtras(contentDir, loaders);
+        onVerifyingFiles();
         for (ManifestEntry entry : manifest.getTasks()) {
             entry.install(installer, currentLog, updateCache, extras);
         }
@@ -174,14 +196,25 @@ public abstract class BaseUpdater {
         return manifest;
     }
 
+    /**
+     * Called after feature selection has finalized the manifest, but before any
+     * package files are enumerated or queued for download.
+     */
+    protected void onManifestPrepared(Manifest manifest) throws Exception {
+    }
+
+    protected void onVerifyingFiles() {
+    }
+
     protected void installJar(@NonNull Installer installer,
-                              @NonNull VersionManifest.Artifact artifact,
-                              @NonNull File jarFile,
-                              @NonNull URL url) throws InterruptedException {
+            @NonNull VersionManifest.Artifact artifact,
+            @NonNull File jarFile,
+            @NonNull URL url) throws InterruptedException {
         // If the JAR does not exist, install it
         if (!jarFile.exists()) {
             long size = artifact.getSize();
-            if (size <= 0) size = JAR_SIZE_ESTIMATE;
+            if (size <= 0)
+                size = JAR_SIZE_ESTIMATE;
 
             File tempFile = installer.getDownloader().download(url, "", size, jarFile.getName());
             installer.queue(new FileMover(tempFile, jarFile));
@@ -193,9 +226,9 @@ public abstract class BaseUpdater {
     }
 
     protected void installAssets(@NonNull Installer installer,
-                                 @NonNull VersionManifest versionManifest,
-                                 @NonNull URL indexUrl,
-                                 @NonNull List<URL> sources) throws IOException, InterruptedException {
+            @NonNull VersionManifest versionManifest,
+            @NonNull URL indexUrl,
+            @NonNull List<URL> sources) throws IOException, InterruptedException {
         AssetsRoot assetsRoot = launcher.getAssets();
 
         AssetsIndex index = HttpRequest
@@ -226,19 +259,18 @@ public abstract class BaseUpdater {
                     }
                 }
 
-                File tempFile = installer.getDownloader().download(
-                        urls, "", entry.getValue().getSize(), entry.getKey());
-                installer.queue(new FileMover(tempFile, targetFile));
-                log.info("Fetching " + path + " from " + urls);
+                installer.getDownloader().download(
+                        urls, targetFile, entry.getValue().getSize(), entry.getKey());
+                log.fine("Fetching " + path + " from " + urls);
                 downloading.add(path);
             }
         }
     }
 
     protected void installLibraries(@NonNull Installer installer,
-                                    @NonNull Manifest manifest,
-                                    @NonNull File librariesDir,
-                                    @NonNull List<URL> sources) throws InterruptedException, IOException {
+            @NonNull Manifest manifest,
+            @NonNull File librariesDir,
+            @NonNull List<URL> sources) throws InterruptedException, IOException {
         VersionManifest versionManifest = manifest.getVersionManifest();
 
         Iterable<Library> allLibraries = versionManifest.getLibraries();
@@ -247,7 +279,8 @@ public abstract class BaseUpdater {
         }
 
         for (Library library : allLibraries) {
-            if (library.isGenerated()) continue; // Skip generated libraries.
+            if (library.isGenerated())
+                continue; // Skip generated libraries.
 
             if (library.matches(environment)) {
                 checkInterrupted();
@@ -256,7 +289,8 @@ public abstract class BaseUpdater {
                 String path = artifact.getPath();
 
                 long size = artifact.getSize();
-                if (size <= 0) size = LIBRARY_SIZE_ESTIMATE;
+                if (size <= 0)
+                    size = LIBRARY_SIZE_ESTIMATE;
 
                 File targetFile = new File(librariesDir, path);
 
@@ -291,7 +325,8 @@ public abstract class BaseUpdater {
 
             if (embeddedConfig == null) {
                 // No embedded config, just use whatever the server gives us
-                File tempFile = installer.getDownloader().download(url(file.getUrl()), file.getHash(), file.getSize(), file.getId());
+                File tempFile = installer.getDownloader().download(url(file.getUrl()), file.getHash(), file.getSize(),
+                        file.getId());
 
                 log.info("Downloading logging config " + file.getId() + " from " + file.getUrl());
                 installer.queue(new FileMover(tempFile, targetFile));

@@ -8,12 +8,14 @@ package com.skcraft.launcher.model.modpack;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.ObjectIdGenerators;
 import com.google.common.base.Strings;
 import lombok.Data;
 
 @JsonIdentityInfo(generator=ObjectIdGenerators.PropertyGenerator.class, property="name")
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Data
 public class Feature implements Comparable<Feature> {
 
@@ -36,7 +38,7 @@ public class Feature implements Comparable<Feature> {
     private String description;
     private Recommendation recommendation;
     private boolean selected;
-    private int maxMemoryDelta;
+    private int minMemoryDelta;
 
     public Feature() {
     }
@@ -51,7 +53,7 @@ public class Feature implements Comparable<Feature> {
         setName(feature.getName());
         setDescription(feature.getDescription());
         setSelected(feature.isSelected());
-        setMaxMemoryDelta(feature.getMaxMemoryDelta());
+        setMinMemoryDelta(feature.getMinMemoryDelta());
     }
 
     @Override

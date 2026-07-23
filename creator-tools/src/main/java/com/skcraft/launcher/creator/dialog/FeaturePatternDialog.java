@@ -28,7 +28,7 @@ public class FeaturePatternDialog extends JDialog {
     private final JTextArea descArea = new JTextArea(3, 40);
     private final JComboBox<Recommendation> recommendationCombo = new JComboBox<Recommendation>(new RecommendationComboBoxModel());
     private final JCheckBox selectedCheck = new JCheckBox("Selected by default");
-    private final JSpinner maxMemoryDeltaSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 65536, 128));
+    private final JSpinner minMemoryDeltaSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 65536, 128));
     private final JTextArea includeArea = new JTextArea(8, 40);
     private final JTextArea excludeArea = new JTextArea(3, 40);
 
@@ -70,8 +70,9 @@ public class FeaturePatternDialog extends JDialog {
 
         container.add(selectedCheck, "span");
 
-        container.add(new JLabel("Max Memory Increase (MB):"));
-        container.add(maxMemoryDeltaSpinner, "span");
+        container.add(new JLabel("Min Memory Increase (MB):"));
+        container.add(minMemoryDeltaSpinner, "span");
+        SwingHelper.enableSpinnerMouseWheel(minMemoryDeltaSpinner);
 
         container.add(new JLabel("Description:"), "wrap");
         container.add(SwingHelper.wrapScrollPane(descArea), "span");
@@ -130,7 +131,7 @@ public class FeaturePatternDialog extends JDialog {
         SwingHelper.setTextAndResetCaret(descArea, pattern.getFeature().getDescription());
         recommendationCombo.setSelectedItem(pattern.getFeature().getRecommendation());
         selectedCheck.setSelected(pattern.getFeature().isSelected());
-        maxMemoryDeltaSpinner.setValue(pattern.getFeature().getMaxMemoryDelta());
+        minMemoryDeltaSpinner.setValue(pattern.getFeature().getMinMemoryDelta());
         SwingHelper.setTextAndResetCaret(includeArea, NEW_LINE_JOINER.join(pattern.getFilePatterns().getInclude()));
         SwingHelper.setTextAndResetCaret(excludeArea, NEW_LINE_JOINER.join(pattern.getFilePatterns().getExclude()));
     }
@@ -140,7 +141,7 @@ public class FeaturePatternDialog extends JDialog {
         pattern.getFeature().setDescription(descArea.getText().trim());
         pattern.getFeature().setRecommendation((Recommendation) recommendationCombo.getSelectedItem());
         pattern.getFeature().setSelected(selectedCheck.isSelected());
-        pattern.getFeature().setMaxMemoryDelta((int) maxMemoryDeltaSpinner.getValue());
+        pattern.getFeature().setMinMemoryDelta((int) minMemoryDeltaSpinner.getValue());
         pattern.getFilePatterns().setInclude(SwingHelper.linesToList(includeArea.getText()));
         pattern.getFilePatterns().setExclude(SwingHelper.linesToList(excludeArea.getText()));
     }

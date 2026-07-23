@@ -8,6 +8,7 @@ package com.skcraft.launcher.creator.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
+import com.skcraft.launcher.creator.model.creator.ManifestEntry;
 import com.skcraft.launcher.model.modpack.Manifest;
 import com.skcraft.launcher.model.modpack.ManifestInfo;
 import com.skcraft.launcher.model.modpack.PackageList;
@@ -20,16 +21,25 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 class PackagesHandler extends AbstractHandler {
 
     private final ObjectMapper mapper;
     private final File baseDir;
+    private volatile Supplier<List<ManifestEntry>> listingEntriesSupplier = Collections::emptyList;
 
     public PackagesHandler(ObjectMapper mapper, File baseDir) {
         this.mapper = mapper;
         this.baseDir = baseDir;
+    }
+
+    public void setListingEntriesSupplier(Supplier<List<ManifestEntry>> listingEntriesSupplier) {
+        this.listingEntriesSupplier = listingEntriesSupplier != null
+                ? listingEntriesSupplier
+                : Collections::emptyList;
     }
 
     public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
@@ -40,6 +50,11 @@ class PackagesHandler extends AbstractHandler {
         PackageList packageList = new PackageList();
         packageList.setPackages(packages);
 
+        List<ManifestEntry> listingEntries = listingEntriesSupplier.get();
+        if (listingEntries == null) {
+            listingEntries = Collections.emptyList();
+        }
+
         File[] files = baseDir.listFiles(new PackageFileFilter());
         if (files != null) {
             for (File file : files) {
@@ -49,6 +64,17 @@ class PackagesHandler extends AbstractHandler {
                 info.setTitle(manifest.getTitle());
                 info.setVersion(manifest.getVersion());
                 info.setLocation(file.getName());
+
+                for (ManifestEntry entry : listingEntries) {
+                    ManifestInfo listed = entry.getManifestInfo();
+                    if (listed != null && file.getName().equals(listed.getLocation())) {
+                        info.setPriority(listed.getPriority());
+                        info.setNewsUrl(listed.getNewsUrl());
+                        info.setIconUrl(listed.getIconUrl());
+                        break;
+                    }
+                }
+
                 packages.add(info);
             }
         }

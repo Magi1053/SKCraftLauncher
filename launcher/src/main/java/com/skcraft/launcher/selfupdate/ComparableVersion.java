@@ -345,7 +345,7 @@ public class ComparableVersion
     }
 
     private static Item parseItem(boolean isDigit, String buf) {
-        return isDigit ? new IntegerItem(new Integer(buf)) : new StringItem(buf, false);
+        return isDigit ? new IntegerItem(Integer.parseInt(buf)) : new StringItem(buf, false);
     }
 
     public int compareTo(Object o) {

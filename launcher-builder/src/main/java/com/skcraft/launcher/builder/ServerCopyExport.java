@@ -50,7 +50,7 @@ public class ServerCopyExport extends DirectoryWalker {
         SimpleLogFormatter.configureGlobalLogger();
 
         ServerExportOptions options = new ServerExportOptions();
-        new JCommander(options, args);
+        new JCommander(options).parse(args);
 
         log.info("From: " + options.getSourceDir().getAbsolutePath());
         log.info("To: " + options.getDestDir().getAbsolutePath());

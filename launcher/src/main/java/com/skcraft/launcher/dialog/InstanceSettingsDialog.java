@@ -4,6 +4,7 @@ import com.skcraft.launcher.Instance;
 import com.skcraft.launcher.InstanceSettings;
 import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.launch.JavaProcessBuilder;
+import com.skcraft.launcher.launch.MemoryRequirements;
 import com.skcraft.launcher.launch.MemorySettings;
 import com.skcraft.launcher.launch.runtime.AddJavaRuntime;
 import com.skcraft.launcher.launch.runtime.JavaRuntime;
@@ -11,6 +12,7 @@ import com.skcraft.launcher.launch.runtime.JavaRuntimeFinder;
 import com.skcraft.launcher.model.minecraft.JavaVersion;
 import com.skcraft.launcher.model.minecraft.VersionManifest;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.skcraft.launcher.model.modpack.LaunchModifier;
 import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.FormPanel;
 import com.skcraft.launcher.swing.GroupedComboBox;
@@ -29,12 +31,17 @@ import javax.swing.filechooser.FileFilter;
 import java.awt.*;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class InstanceSettingsDialog extends JDialog {
+	private static final Logger log = Logger.getLogger(InstanceSettingsDialog.class.getName());
 	private static final ObjectMapper VERSION_MAPPER = new ObjectMapper();
+	private static final int MAX_CONFIGURABLE_MEMORY = 65536;
 
 	private final Launcher launcher;
 	private final Instance instance;
@@ -49,7 +56,8 @@ public class InstanceSettingsDialog extends JDialog {
 	private JComboBox<Object> javaRuntimeBox;
 	private final JTextArea userJavaArgsText = new JTextArea(4, 30);
 	private final JScrollPane userJavaArgsScroll = new JScrollPane(userJavaArgsText);
-	private final JCheckBox modpackJvmArgsCheck = new JCheckBox(SharedLocale.tr("instance.options.useModpackJvmArguments"));
+	private final JCheckBox modpackJvmArgsCheck = new JCheckBox(
+			SharedLocale.tr("instance.options.useModpackJvmArguments"));
 	private final JTextArea combinedJavaArgsText = new JTextArea(3, 30);
 
 	private final LinedBoxPanel buttonsPanel = new LinedBoxPanel(true);
@@ -62,36 +70,58 @@ public class InstanceSettingsDialog extends JDialog {
 		super(owner);
 		this.launcher = launcher;
 		this.instance = instance;
-		this.settings = instance.getSettings();
+		this.settings = getOrCreateSettings(instance);
 
-		setTitle(SharedLocale.tr("instance.options.title"));
+		setTitle(instance.getTitle() + " - " + SharedLocale.tr("instance.options.title"));
 		setModalityType(DEFAULT_MODALITY_TYPE);
 		initComponents();
 		setSize(new Dimension(480, 600));
 		setLocationRelativeTo(owner);
 	}
 
+	private static InstanceSettings getOrCreateSettings(Instance instance) {
+		if (instance.getSettings() == null) {
+			instance.setSettings(new InstanceSettings());
+		}
+		return instance.getSettings();
+	}
+
 	private void initComponents() {
 		initJavaRuntimeBox();
+		initMemorySpinners();
 		initLayout();
 		initActions();
 
 		updateComponents();
 	}
 
+	private void initMemorySpinners() {
+		int minMemoryCap = getMinimumConfigurableMemory();
+		minMemorySpinner
+				.setModel(new SpinnerNumberModel(minMemoryCap,
+						minMemoryCap, MAX_CONFIGURABLE_MEMORY, 128));
+		maxMemorySpinner
+				.setModel(new SpinnerNumberModel(Math.max(MemorySettings.DEFAULT_MAX_MEMORY, minMemoryCap),
+						minMemoryCap, MAX_CONFIGURABLE_MEMORY, 128));
+		SwingHelper.enableSpinnerMouseWheel(minMemorySpinner, maxMemorySpinner);
+		SwingHelper.linkMinMaxSpinners(minMemorySpinner, maxMemorySpinner);
+	}
+
+	private int getMinimumConfigurableMemory() {
+		LaunchModifier modifier = instance.getLaunchModifier();
+		int requiredMinMemory = modifier != null ? modifier.getMinMemory() : 0;
+		return Math.max(MemorySettings.DEFAULT_MIN_MEMORY, requiredMinMemory);
+	}
+
 	private void initJavaRuntimeBox() {
+		javaRuntimeBox = GroupedComboBox.create(createRuntimeModel(Collections.emptyList()),
+				this::formatRuntimeOptionLabel);
+		loadManagedRuntimesAsync();
+	}
+
+	private GroupedComboBox.Model createRuntimeModel(List<ManagedRuntimeOption> managedOptions) {
 		GroupedComboBox.Model model = new GroupedComboBox.Model();
 		model.addElement(null);
-
-		List<ManagedRuntimeOption> managedOptions = new ArrayList<>();
-		try {
-			managedOptions.addAll(launcher.getRuntimeManager()
-					.fetchManagedRuntimes(launcher.propUrl("runtimeManifestUrl")));
-		} catch (Exception e) {
-			SwingHelper.showErrorDialog(this,
-					SharedLocale.tr("instance.options.managedRuntimeLoadFailed"),
-					SharedLocale.tr("instance.options.managedRuntimeLoadFailedTitle"), e);
-		}
 
 		Set<JavaRuntime> managedDirs = new HashSet<>();
 		for (ManagedRuntimeOption option : managedOptions) {
@@ -120,7 +150,50 @@ public class InstanceSettingsDialog extends JDialog {
 		}
 		model.addElement(AddJavaRuntime.ADD_RUNTIME_SENTINEL);
 
-		javaRuntimeBox = GroupedComboBox.create(model, this::formatRuntimeOptionLabel);
+		return model;
+	}
+
+	private void loadManagedRuntimesAsync() {
+		new SwingWorker<List<ManagedRuntimeOption>, Void>() {
+			@Override
+			protected List<ManagedRuntimeOption> doInBackground() throws Exception {
+				return launcher.getRuntimeManager().fetchManagedRuntimes(launcher.propUrl("runtimeManifestUrl"));
+			}
+
+			@Override
+			protected void done() {
+				try {
+					Object selected = javaRuntimeBox.getSelectedItem();
+					GroupedComboBox.Model model = createRuntimeModel(get());
+					javaRuntimeBox.setModel(model);
+					javaRuntimeBox.setSelectedItem(findMatchingRuntimeSelection(model, selected));
+				} catch (Exception e) {
+					SwingHelper.showErrorDialog(InstanceSettingsDialog.this,
+							SharedLocale.tr("instance.options.managedRuntimeLoadFailed"),
+							SharedLocale.tr("instance.options.managedRuntimeLoadFailedTitle"), e);
+				}
+			}
+		}.execute();
+	}
+
+	private Object findMatchingRuntimeSelection(ComboBoxModel<Object> model, Object selection) {
+		if (selection == null) {
+			return null;
+		}
+
+		for (int i = 0; i < model.getSize(); i++) {
+			Object element = model.getElementAt(i);
+			if (selection instanceof ManagedRuntimeOption && element instanceof ManagedRuntimeOption) {
+				String component = ((ManagedRuntimeOption) selection).getComponent();
+				if (component.equals(((ManagedRuntimeOption) element).getComponent())) {
+					return element;
+				}
+			} else if (selection instanceof JavaRuntime && selection.equals(element)) {
+				return element;
+			}
+		}
+
+		return selection;
 	}
 
 	private String formatRuntimeOptionLabel(Object value) {
@@ -236,8 +309,9 @@ public class InstanceSettingsDialog extends JDialog {
 		SwingHelper.alignButtonSizes(okButton, cancelButton);
 
 		okButton.addActionListener(e -> {
-			save();
-			dispose();
+			if (save()) {
+				dispose();
+			}
 		});
 
 		cancelButton.addActionListener(e -> dispose());
@@ -301,7 +375,8 @@ public class InstanceSettingsDialog extends JDialog {
 
 				int result = chooser.showOpenDialog(this);
 				if (result == JFileChooser.APPROVE_OPTION) {
-					JavaRuntime runtime = JavaRuntimeFinder.getRuntimeFromPath(chooser.getSelectedFile().getAbsolutePath());
+					JavaRuntime runtime = JavaRuntimeFinder
+							.getRuntimeFromPath(chooser.getSelectedFile().getAbsolutePath());
 
 					MutableComboBoxModel<Object> comboModel = (MutableComboBoxModel<Object>) javaRuntimeBox.getModel();
 					comboModel.insertElementAt(runtime, indexOfAddRuntimeSentinel(comboModel));
@@ -312,14 +387,14 @@ public class InstanceSettingsDialog extends JDialog {
 	}
 
 	private void updateComponents() {
-		MemorySettings.Resolved resolved = MemorySettings.resolve(instance);
-		if (settings.getMemorySettings() == null) {
-			minMemorySpinner.setValue(resolved.getMinMemory());
-			maxMemorySpinner.setValue(resolved.getMaxMemory());
-		} else {
-			minMemorySpinner.setValue(settings.getMemorySettings().getMinMemory());
-			maxMemorySpinner.setValue(settings.getMemorySettings().getMaxMemory());
-		}
+		MemorySettings.Resolved memory = settings.getMemorySettings() == null
+				? MemorySettings.resolve(instance)
+				: MemorySettings.normalize(
+						settings.getMemorySettings().getMinMemory(),
+						settings.getMemorySettings().getMaxMemory());
+		int minMemory = Math.max(getMinimumConfigurableMemory(), memory.getMinMemory());
+		minMemorySpinner.setValue(minMemory);
+		maxMemorySpinner.setValue(Math.max(minMemory, memory.getMaxMemory()));
 		javaRuntimeBox.setSelectedItem(getCurrentRuntimeSelection());
 		userJavaArgsText.setText(settings.getCustomJvmArgs() != null ? settings.getCustomJvmArgs() : "");
 		modpackJvmArgsCheck.setSelected(settings.isModpackJvmArgsEnabled());
@@ -357,15 +432,11 @@ public class InstanceSettingsDialog extends JDialog {
 
 	private int getEffectiveMinMemory() {
 		int minMemory = (int) minMemorySpinner.getValue();
-		return minMemory > 0 ? minMemory : 1024;
+		return Math.max(getMinimumConfigurableMemory(), minMemory);
 	}
 
 	private int getEffectiveMaxMemory(int minMemory) {
 		int maxMemory = (int) maxMemorySpinner.getValue();
-		if (maxMemory <= 0) {
-			maxMemory = 1024;
-		}
-
 		return Math.max(minMemory, maxMemory);
 	}
 
@@ -375,7 +446,8 @@ public class InstanceSettingsDialog extends JDialog {
 			for (int i = 0; i < model.getSize(); i++) {
 				Object element = model.getElementAt(i);
 				if (element instanceof ManagedRuntimeOption
-						&& settings.getManagedRuntimeComponent().equals(((ManagedRuntimeOption) element).getComponent())) {
+						&& settings.getManagedRuntimeComponent()
+								.equals(((ManagedRuntimeOption) element).getComponent())) {
 					return element;
 				}
 			}
@@ -384,15 +456,28 @@ public class InstanceSettingsDialog extends JDialog {
 		return settings.getRuntime();
 	}
 
-	private void save() {
+	private boolean save() {
+		int maxMemory = getEffectiveMaxMemory(getEffectiveMinMemory());
+		int systemCap = MemoryRequirements.getPhysicalMemoryCapMb();
+		if (maxMemory > systemCap) {
+			SwingHelper.showErrorDialog(this,
+					SharedLocale.tr("runner.instanceMemoryExceedsSystem",
+							instance.getTitle(),
+							MemorySettings.formatMemoryGb(maxMemory),
+							MemorySettings.formatMemoryGb(systemCap)),
+					SharedLocale.tr("launcher.insufficientSystemMemoryTitle"));
+			return false;
+		}
+
 		MemorySettings memorySettings = settings.getMemorySettings();
 		if (memorySettings == null) {
 			memorySettings = new MemorySettings();
 			settings.setMemorySettings(memorySettings);
 		}
 
-		memorySettings.setMinMemory((int) minMemorySpinner.getValue());
-		memorySettings.setMaxMemory((int) maxMemorySpinner.getValue());
+		int minMemory = getEffectiveMinMemory();
+		memorySettings.setMinMemory(minMemory);
+		memorySettings.setMaxMemory(getEffectiveMaxMemory(minMemory));
 		Object selectedRuntime = javaRuntimeBox.getSelectedItem();
 		if (selectedRuntime == null) {
 			settings.setRuntime(null);
@@ -409,11 +494,25 @@ public class InstanceSettingsDialog extends JDialog {
 		settings.setModpackJvmArgsEnabled(modpackJvmArgsCheck.isSelected());
 
 		saved = true;
+		return true;
 	}
 
 	public static boolean open(Window parent, Launcher launcher, Instance instance) {
-		InstanceSettingsDialog dialog = new InstanceSettingsDialog(parent, launcher, instance);
-		dialog.setVisible(true);
+		if (!instance.isLocal()) {
+			return false;
+		}
+
+		InstanceSettingsDialog dialog;
+		try {
+			dialog = new InstanceSettingsDialog(parent, launcher, instance);
+			dialog.setVisible(true);
+		} catch (Throwable t) {
+			log.log(Level.WARNING, "Failed to open instance settings for " + instance.getName(), t);
+			SwingHelper.showErrorDialog(parent,
+					SharedLocale.tr("errors.genericError"),
+					SharedLocale.tr("instance.options.title"), t);
+			return false;
+		}
 
 		if (dialog.saved) {
 			Persistence.commitAndForget(instance);

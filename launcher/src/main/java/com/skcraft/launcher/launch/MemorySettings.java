@@ -1,9 +1,13 @@
 package com.skcraft.launcher.launch;
 
 import com.skcraft.launcher.Instance;
+import com.skcraft.launcher.model.modpack.Feature;
 import com.skcraft.launcher.model.modpack.LaunchModifier;
 import lombok.Data;
 import lombok.Value;
+
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Settings for launched process memory allocation.
@@ -58,12 +62,20 @@ public class MemorySettings {
 			}
 		}
 
+		return normalize(minMemory, maxMemory);
+	}
+
+	public static String formatMemoryGb(int memoryMb) {
+		return String.format(Locale.US, memoryMb % 1024 == 0 ? "%.0f" : "%.1f", memoryMb / 1024.0);
+	}
+
+	public static Resolved normalize(int minMemory, int maxMemory) {
 		if (minMemory <= 0) {
 			minMemory = DEFAULT_MIN_MEMORY;
 		}
 
 		if (maxMemory <= 0) {
-			maxMemory = DEFAULT_MIN_MEMORY;
+			maxMemory = DEFAULT_MAX_MEMORY;
 		}
 
 		if (minMemory > maxMemory) {
@@ -73,28 +85,66 @@ public class MemorySettings {
 		return new Resolved(minMemory, maxMemory);
 	}
 
-	/**
-	 * Copy manifest launch memory into instance settings when values are set.
-	 */
-	public static void applyFromLaunchModifier(Instance instance, LaunchModifier modifier) {
-		if (modifier == null) {
+	public static LaunchModifier computeEffectiveLaunchModifier(LaunchModifier base, List<Feature> features) {
+		LaunchModifier modifier = new LaunchModifier(base);
+		Resolved memory = normalize(modifier);
+
+		if (features != null) {
+			for (Feature feature : features) {
+				if (feature != null && feature.isSelected() && feature.getMinMemoryDelta() > 0) {
+					memory = normalize(memory.getMinMemory() + feature.getMinMemoryDelta(), memory.getMaxMemory());
+				}
+			}
+		}
+
+		modifier.setMinMemory(memory.getMinMemory());
+		modifier.setMaxMemory(memory.getMaxMemory());
+		return modifier;
+	}
+
+	public static void syncDefaultsFromManifest(
+			Instance instance, LaunchModifier previousEffective, LaunchModifier newEffective) {
+		boolean hadSettings = instance.getSettings().getMemorySettings() != null;
+		MemorySettings settings = getOrCreateSettings(instance);
+		Resolved nextDefaults = normalize(newEffective);
+		if (!hadSettings) {
+			settings.setMinMemory(nextDefaults.getMinMemory());
+			settings.setMaxMemory(nextDefaults.getMaxMemory());
 			return;
 		}
 
+		Resolved current = normalize(settings.getMinMemory(), settings.getMaxMemory());
+		Resolved previousDefaults = previousEffective == null
+				? normalize(DEFAULT_MIN_MEMORY, DEFAULT_MAX_MEMORY)
+				: normalize(previousEffective);
+		int nextMinMemory = current.getMinMemory();
+		int nextMaxMemory = current.getMaxMemory();
+
+		if (nextMinMemory == previousDefaults.getMinMemory()) {
+			nextMinMemory = nextDefaults.getMinMemory();
+		}
+		if (nextMaxMemory == previousDefaults.getMaxMemory()
+				&& nextDefaults.getMaxMemory() > previousDefaults.getMaxMemory()) {
+			nextMaxMemory = nextDefaults.getMaxMemory();
+		}
+		Resolved updated = normalize(nextMinMemory, nextMaxMemory);
+		settings.setMinMemory(updated.getMinMemory());
+		settings.setMaxMemory(updated.getMaxMemory());
+	}
+
+	private static Resolved normalize(LaunchModifier modifier) {
+		if (modifier == null) {
+			return normalize(DEFAULT_MIN_MEMORY, DEFAULT_MAX_MEMORY);
+		}
+		return normalize(modifier.getMinMemory(), modifier.getMaxMemory());
+	}
+
+	private static MemorySettings getOrCreateSettings(Instance instance) {
 		MemorySettings settings = instance.getSettings().getMemorySettings();
 		if (settings == null) {
 			settings = new MemorySettings();
 			instance.getSettings().setMemorySettings(settings);
 		}
-
-		if (modifier.getMinMemory() > 0) {
-			settings.setMinMemory(modifier.getMinMemory());
-		}
-		if (modifier.getMaxMemory() > 0) {
-			settings.setMaxMemory(modifier.getMaxMemory());
-		}
-		if (settings.getMinMemory() > settings.getMaxMemory()) {
-			settings.setMaxMemory(settings.getMinMemory());
-		}
+		return settings;
 	}
 }
