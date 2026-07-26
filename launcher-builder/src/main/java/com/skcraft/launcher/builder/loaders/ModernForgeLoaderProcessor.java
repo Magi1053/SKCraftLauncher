@@ -5,6 +5,7 @@ import com.google.common.collect.Lists;
 import com.google.common.io.CharStreams;
 import com.google.common.io.Closer;
 import com.skcraft.launcher.builder.BuilderUtils;
+import com.skcraft.launcher.model.loader.InstallProcessor;
 import com.skcraft.launcher.model.loader.LoaderManifest;
 import com.skcraft.launcher.model.loader.SidedData;
 import com.skcraft.launcher.model.loader.VersionInfo;
@@ -20,7 +21,9 @@ import lombok.extern.java.Log;
 
 import java.io.*;
 import java.net.URL;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 
@@ -156,21 +159,9 @@ public class ModernForgeLoaderProcessor implements ILoaderProcessor {
 				// Add loader manifest to the map
 				manifest.getLoaders().put(loaderName, new LoaderManifest(profile.getLibraries(), profile.getData(), extraFiles));
 
-				// Find name of final patched library and mark it as excluded from download
-				// TODO: we should generalize this to all process outputs, really
-				SidedData<String> finalJars = profile.getData().get("PATCHED");
-				if (finalJars != null) {
-					String libraryName = finalJars.getClient();
-					libraryName = libraryName.substring(1, libraryName.length() - 1);
-
-					for (Library lib : result.getLoaderLibraries()) {
-						if (lib.matches(libraryName)) {
-							lib.setGenerated(true);
-							log.info(String.format("Setting generated flag on library '%s'", lib.getName()));
-							break;
-						}
-					}
-				}
+				// Processor outputs are created locally and must not be fetched
+				// from Maven repositories.
+				markGeneratedProcessorOutputs(profile, result);
 
 				// Add processors
 				manifest.getTasks().addAll(profile.toProcessorEntries(loaderName));
@@ -187,5 +178,66 @@ public class ModernForgeLoaderProcessor implements ILoaderProcessor {
 		}
 
 		return result;
+	}
+
+	private void markGeneratedProcessorOutputs(ModernForgeInstallProfile profile, LoaderResult result) {
+		Set<String> generatedLibraries = new HashSet<>();
+
+		if (profile.getProcessors() != null) {
+			for (InstallProcessor processor : profile.getProcessors()) {
+				if (!processor.shouldRunOn(Side.CLIENT) || processor.getOutputs() == null) {
+					continue;
+				}
+
+				for (String output : processor.getOutputs().keySet()) {
+					addLibraryReference(generatedLibraries, resolveDataReference(profile, output));
+				}
+			}
+		}
+
+		// Preserve compatibility with profiles where PATCHED is not declared in
+		// a processor outputs map.
+		addLibraryReference(generatedLibraries, resolveDataReference(profile, "{PATCHED}"));
+
+		for (String libraryName : generatedLibraries) {
+			markGenerated(result.getLoaderLibraries(), libraryName);
+			markGenerated(profile.getLibraries(), libraryName);
+		}
+	}
+
+	private String resolveDataReference(ModernForgeInstallProfile profile, String value) {
+		if (value == null || value.length() < 3) {
+			return value;
+		}
+
+		if (value.charAt(0) == '{' && value.charAt(value.length() - 1) == '}') {
+			String key = value.substring(1, value.length() - 1);
+			SidedData<String> data = profile.getData() != null
+					? profile.getData().get(key)
+					: null;
+			return data != null ? data.resolveFor(Side.CLIENT) : null;
+		}
+
+		return value;
+	}
+
+	private void addLibraryReference(Set<String> libraries, String value) {
+		if (value != null && value.length() > 2
+				&& value.charAt(0) == '[' && value.charAt(value.length() - 1) == ']') {
+			libraries.add(value.substring(1, value.length() - 1));
+		}
+	}
+
+	private void markGenerated(List<Library> libraries, String libraryName) {
+		if (libraries == null) {
+			return;
+		}
+
+		for (Library library : libraries) {
+			if (library.matches(libraryName)) {
+				library.setGenerated(true);
+				log.info(String.format("Setting generated flag on library '%s'", library.getName()));
+			}
+		}
 	}
 }

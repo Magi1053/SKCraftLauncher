@@ -31,10 +31,9 @@ public class ProcessorEntry extends ManifestEntry {
 		if (args != null) {
 			cacheKey += ":" + String.join(":", args);
 		}
-		if (!cache.mark(cacheKey, loaderName)) {
-			return;
-		}
+		boolean cacheHit = !cache.mark(cacheKey, loaderName);
 
-		installer.queueLate(new ProcessorTask(processor, loader.getManifest(), getManifest(), loader.getLocalFiles()));
+		installer.queueLate(new ProcessorTask(processor, loader.getManifest(), getManifest(),
+				loader.getLocalFiles(), cacheHit));
 	}
 }

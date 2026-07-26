@@ -13,7 +13,6 @@ import com.skcraft.launcher.model.modpack.DownloadableFile;
 import com.skcraft.launcher.model.modpack.Manifest;
 import com.skcraft.launcher.util.Environment;
 import com.skcraft.launcher.util.FileUtils;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 
 import java.io.File;
@@ -28,16 +27,25 @@ import java.util.jar.JarFile;
 
 import static com.skcraft.launcher.util.SharedLocale.tr;
 
-@RequiredArgsConstructor
 @Log
 public class ProcessorTask implements InstallTask {
 	private final InstallProcessor processor;
 	private final LoaderManifest loaderManifest;
 	private final Manifest manifest;
 	private final HashMap<String, DownloadableFile.LocalFile> localFiles;
+	private final boolean cacheHit;
 
 	private transient String message = "";
 	private transient double progress = 0;
+
+	public ProcessorTask(InstallProcessor processor, LoaderManifest loaderManifest, Manifest manifest,
+			HashMap<String, DownloadableFile.LocalFile> localFiles, boolean cacheHit) {
+		this.processor = processor;
+		this.loaderManifest = loaderManifest;
+		this.manifest = manifest;
+		this.localFiles = localFiles;
+		this.cacheHit = cacheHit;
+	}
 
 	@Override
 	public void execute(Launcher launcher) throws Exception {
@@ -55,6 +63,14 @@ public class ProcessorTask implements InstallTask {
 		message = "Resolving parameters";
 		List<String> programArgs = processor.resolveArgs(resolver);
 		Map<String, String> outputs = processor.resolveOutputs(resolver);
+
+		message = "Checking existing outputs";
+		if (isUpToDate(resolver, outputs)) {
+			progress = 1.0;
+			message = "Already installed";
+			log.info(String.format("Skipping processor '%s'; outputs are already present", processor.getJar()));
+			return;
+		}
 
 		message = "Finding libraries";
 		Library execFile = loaderManifest.findLibrary(processor.getJar());
@@ -138,6 +154,81 @@ public class ProcessorTask implements InstallTask {
 				progress = (double) i / total;
 			}
 		}
+	}
+
+	private boolean isUpToDate(LoaderSubResolver resolver, Map<String, String> outputs) throws Exception {
+		if (!outputs.isEmpty()) {
+			for (Map.Entry<String, String> output : outputs.entrySet()) {
+				File artifact = new File(output.getKey());
+				if (!artifact.isFile()) {
+					return false;
+				}
+
+				String expectedHash = output.getValue();
+				if (expectedHash != null && !expectedHash.isEmpty()
+						&& !FileUtils.getShaHash(artifact).equalsIgnoreCase(expectedHash)) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		InferredOutputState inferredState = inferOutputState(resolver);
+		if (inferredState == InferredOutputState.PRESENT) {
+			return true;
+		}
+		if (inferredState == InferredOutputState.MISSING) {
+			return false;
+		}
+
+		// Retain the old cache behavior for processors whose profile gives us
+		// no output artifact to validate.
+		return cacheHit;
+	}
+
+	private InferredOutputState inferOutputState(LoaderSubResolver resolver) {
+		List<String> args = processor.getArgs();
+		if (args == null || args.isEmpty()) {
+			return InferredOutputState.NONE;
+		}
+
+		boolean foundOutput = false;
+		if (loaderManifest.getSidedData() == null) {
+			return InferredOutputState.NONE;
+		}
+
+		for (Map.Entry<String, SidedData<String>> data : loaderManifest.getSidedData().entrySet()) {
+			String reference = data.getValue() != null
+					? data.getValue().resolveFor(Side.CLIENT)
+					: null;
+			if (!isLibraryReference(reference)) {
+				continue;
+			}
+
+			String token = "{" + data.getKey() + "}";
+			for (String arg : args) {
+				if (arg != null && arg.contains(token)) {
+					foundOutput = true;
+					if (!new File(resolver.apply(reference)).isFile()) {
+						return InferredOutputState.MISSING;
+					}
+					break;
+				}
+			}
+		}
+
+		return foundOutput ? InferredOutputState.PRESENT : InferredOutputState.NONE;
+	}
+
+	private boolean isLibraryReference(String value) {
+		return value != null && value.length() > 2
+				&& value.charAt(0) == '[' && value.charAt(value.length() - 1) == ']';
+	}
+
+	private enum InferredOutputState {
+		NONE,
+		PRESENT,
+		MISSING
 	}
 
 	@Override

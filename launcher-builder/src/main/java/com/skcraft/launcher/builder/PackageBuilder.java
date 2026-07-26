@@ -200,6 +200,11 @@ public class PackageBuilder {
         logSection("Downloading libraries...");
 
         for (Library library : Iterables.concat(loaderLibraries, installerLibraries)) {
+            if (library.isGenerated()) {
+                log.info("Skipping generated library " + library.getName());
+                continue;
+            }
+
             library.ensureDownloadsExist();
 
             for (Library.Artifact artifact : library.getDownloads().getAllArtifacts()) {
