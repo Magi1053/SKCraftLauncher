@@ -9,6 +9,7 @@ package com.skcraft.launcher.util;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.skcraft.concurrency.ProgressObservable;
+import com.skcraft.launcher.util.download.DownloadRequestHandlers;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.java.Log;
@@ -148,7 +149,9 @@ public class HttpRequest implements Closeable, ProgressObservable {
             conn.setRequestProperty("Range", String.format("bytes=%d-", resumeInfo.currentLength));
         }
 
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
+        Map<String, String> requestHeaders = new HashMap<String, String>(headers);
+        DownloadRequestHandlers.prepare(url, requestHeaders);
+        for (Map.Entry<String, String> entry : requestHeaders.entrySet()) {
             conn.setRequestProperty(entry.getKey(), entry.getValue());
         }
 
@@ -208,6 +211,10 @@ public class HttpRequest implements Closeable, ProgressObservable {
         }
 
         close();
+        String failureMessage = DownloadRequestHandlers.explainFailure(url, responseCode);
+        if (failureMessage != null) {
+            throw new IOException(failureMessage);
+        }
         throw new IOException("Did not get expected response code, got " + responseCode + " for " + url);
     }
 
@@ -464,6 +471,11 @@ public class HttpRequest implements Closeable, ProgressObservable {
         try {
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Java) SKMCLauncher");
+            Map<String, String> requestHeaders = new HashMap<String, String>();
+            DownloadRequestHandlers.prepare(url, requestHeaders);
+            for (Map.Entry<String, String> entry : requestHeaders.entrySet()) {
+                conn.setRequestProperty(entry.getKey(), entry.getValue());
+            }
             conn.setInstanceFollowRedirects(true);
             conn.setUseCaches(false);
             conn.setReadTimeout(READ_TIMEOUT);

@@ -279,21 +279,15 @@ public class PackageBuilder {
     }
 
     private boolean tryFetchLibrary(Library library, URL url, File outputPath)
-            throws IOException {
+            throws IOException, InterruptedException {
         File tempFile = File.createTempFile("launcherlib", null);
 
-        Closer closer = Closer.create();
         try {
             log.info("Reading library " + library.getName() + " from " + url.toString());
-            InputStream stream = closer.register(url.openStream());
-            stream = closer.register(new BufferedInputStream(stream));
-
-            ByteStreams.copy(stream, closer.register(new FileOutputStream(tempFile)));
+            HttpRequest.get(url).execute().expectResponseCode(200).saveContent(tempFile);
         } catch (IOException e) {
             log.info("Could not get file from " + url + ": " + e.getMessage());
             return false;
-        } finally {
-            closer.close();
         }
 
         writeLibraryToFile(outputPath, tempFile, Collections.<Compressor>emptyList());
