@@ -156,7 +156,7 @@ public final class InstallerPackager {
                     + " -PbuildDeb=" + shellSingleQuote(buildDeb ? "true" : "false")
                     + " -PappName=" + shellSingleQuote(displayAppName)
                     + " -PinstallDirName=" + shellSingleQuote(linuxInstallDirName)
-                    + " -x :launcher:generateSwtChecksums"
+                    + " -x :launcher:generateWebliteChecksums"
                     + " -x :launcher:generateEffectiveLombokConfig"
                     + " -x :launcher:generateTestEffectiveLombokConfig"
                     + " -x :launcher:compileJava"

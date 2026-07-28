@@ -98,7 +98,7 @@ public class LauncherFrame extends JFrame {
 
     private void initComponents() {
         JPanel container = createContainerPanel();
-        container.setLayout(new MigLayout("fill, insets 0 11 11 11", "[grow]", "[grow][]"));
+        container.setLayout(new MigLayout("fill, ins 11", "[grow]", "[grow][]"));
 
         webView = createNewsPanel();
         instanceScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -107,13 +107,22 @@ public class LauncherFrame extends JFrame {
         instancesPanel.setOpaque(false);
         instancesPanel.add(instanceScroll, INSTANCES_LIST_CARD);
         instancesPanel.add(createNoInstancesPanel(), INSTANCES_EMPTY_CARD);
-        // Border lives on the outer panel; keep the SWT view borderless.
+        // Border lives on the outer panel; keep the embedded browser borderless.
         webView.setBrowserBorder(BorderFactory.createEmptyBorder());
 
-        JPanel leftColumn = new TableChromePanel(new MigLayout("ins 0, fill, gap 0", "[grow, fill]", "[grow, fill][]"));
-        leftColumn.setBorder(SwingHelper.uiLineBorder());
-        leftColumn.add(instancesPanel, "grow, wrap");
-        leftColumn.add(accountSwitcher, "growx");
+        JPanel instancesChrome = new TableChromePanel(new BorderLayout());
+        instancesChrome.setBorder(SwingHelper.uiLineBorder());
+        instancesChrome.add(instancesPanel, BorderLayout.CENTER);
+
+        JPanel accountChrome = new TableChromePanel(new BorderLayout());
+        accountChrome.setBorder(SwingHelper.uiLineBorder());
+        accountChrome.add(accountSwitcher, BorderLayout.CENTER);
+
+        // Same related gap as contentPanel left/news columns.
+        JPanel leftColumn = new JPanel(new MigLayout("ins 0, fill", "[grow, fill]", "[grow, fill][]"));
+        leftColumn.setOpaque(false);
+        leftColumn.add(instancesChrome, "grow, wrap");
+        leftColumn.add(accountChrome, "growx");
 
         JPanel newsPanel = new TableChromePanel(new BorderLayout());
         newsPanel.setBorder(SwingHelper.uiLineBorder());
@@ -239,10 +248,10 @@ public class LauncherFrame extends JFrame {
         try {
             return new WebpagePanel();
         } catch (LinkageError e) {
-            log.warning("SWT Browser is unavailable; embedded news panel disabled");
+            log.warning("Embedded browser is unavailable; news panel disabled");
             return WebpagePanel.missingBrowser();
         } catch (RuntimeException e) {
-            log.warning("SWT Browser failed to initialize; embedded news panel disabled");
+            log.warning("Embedded browser failed to initialize; news panel disabled");
             return WebpagePanel.missingBrowser();
         }
     }

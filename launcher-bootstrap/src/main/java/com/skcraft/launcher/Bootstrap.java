@@ -21,7 +21,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.logging.Level;
 
@@ -275,7 +274,7 @@ public class Bootstrap {
 
     public Class<?> load(File jarFile) throws Exception {
         URL launcherUrl = jarFile.toURI().toURL();
-        URL[] urls = resolveLauncherClasspath(launcherUrl);
+        URL[] urls = new URL[] { launcherUrl };
         URLClassLoader child = new URLClassLoader(urls, ClassLoader.getPlatformClassLoader());
         Class<?> clazz = Class.forName(getProperties().getProperty("launcherClass"), true, child);
 
@@ -286,15 +285,6 @@ public class Bootstrap {
         }
 
         return clazz;
-    }
-
-    private URL[] resolveLauncherClasspath(URL launcherUrl) throws Exception {
-        try (URLClassLoader resolver = new URLClassLoader(
-                new URL[] { launcherUrl }, ClassLoader.getPlatformClassLoader())) {
-            Class<?> runtime = Class.forName("com.skcraft.launcher.browser.BrowserRuntime", true, resolver);
-            Method method = runtime.getMethod("resolveLauncherClasspath", URL.class, Path.class);
-            return (URL[]) method.invoke(null, launcherUrl, baseDir.toPath());
-        }
     }
 
     public static void setSwingLookAndFeel() {

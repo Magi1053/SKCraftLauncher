@@ -1,84 +1,43 @@
-def webViewVersion = '1.0.10'
-def swtVersion = '3.130.0'
-def swtGroup = 'org.eclipse.platform'
-def swtRuntimeRoot = 'natives/swt'
-def swtChecksumResourcePath = 'META-INF/skcraft/swt-checksums.properties'
-
-def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
-def isMacHost = hostOs.contains('mac') || hostOs.contains('darwin')
-def hostBackend = isMacHost ? 'wkwebview' : 'swt'
-def stageHostSwt = hostBackend == 'swt'
-
-// Portable launcher checksum data is needed only by SWT runtime platforms.
-def swtArtifacts = [
-        'org.eclipse.swt.win32.win32.x86_64',
-        'org.eclipse.swt.win32.win32.aarch64',
-        'org.eclipse.swt.gtk.linux.x86_64',
-        'org.eclipse.swt.gtk.linux.aarch64'
+def webViewVersion = '1.0.11'
+def webViewDependency = "ca.weblite:webview:${webViewVersion}"
+def webViewRuntimeRoot = 'natives/weblite'
+def webViewChecksumResourcePath = 'META-INF/skcraft/weblite-checksums.properties'
+def webViewEntries = [
+        windows_64   : 'windows_64/webview.dll',
+        windows_arm64: 'windows_arm64/webview.dll',
+        osx_64       : 'osx_64/libwebview.dylib',
+        osx_arm64    : 'osx_arm64/libwebview.dylib',
+        linux_64     : 'linux_64/libwebview.so',
+        linux_arm64  : 'linux_arm64/libwebview.so',
 ]
 
-def resolveHostSwtArtifact = {
+def resolveHostWebViewPlatform = {
+    String os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
     String arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
-    boolean arm64 = arch.contains('aarch64') || arch.contains('arm64')
+    String suffix = (arch.contains('aarch64') || arch.contains('arm64')) ? 'arm64' : '64'
 
-    if (hostOs.contains('win')) {
-        return arm64 ? 'org.eclipse.swt.win32.win32.aarch64' : 'org.eclipse.swt.win32.win32.x86_64'
-    } else if (isMacHost) {
-        // Compile-only: macOS runtime uses WKWebView, not this SWT artifact.
-        return arm64 ? 'org.eclipse.swt.cocoa.macosx.aarch64' : 'org.eclipse.swt.cocoa.macosx.x86_64'
-    } else if (hostOs.contains('linux')) {
-        return arm64 ? 'org.eclipse.swt.gtk.linux.aarch64' : 'org.eclipse.swt.gtk.linux.x86_64'
+    if (os.contains('win')) {
+        return "windows_${suffix}"
+    } else if (os.contains('mac') || os.contains('darwin')) {
+        return "osx_${suffix}"
+    } else if (os.contains('linux')) {
+        return "linux_${suffix}"
     }
-
-    throw new GradleException("Unsupported browser host platform: os=${hostOs}, arch=${arch}")
+    throw new GradleException("Unsupported browser host platform: os=${os}, arch=${arch}")
 }
 
-def hostSwtArtifact = resolveHostSwtArtifact()
-
-def swtDependency = { String swtArtifact ->
-    "${swtGroup}:${swtArtifact}:${swtVersion}"
-}
-
-def swtJarFileName = { String swtArtifact ->
-    "${swtArtifact}-${swtVersion}.jar"
-}
-
-def swtRuntimePath = { String swtArtifact ->
-    "${swtRuntimeRoot}/${swtVersion}/${swtArtifact}"
-}
-
-def addSwtDependency = { String configurationName, String swtArtifact ->
-    dependencies.add(configurationName, swtDependency(swtArtifact)) {
-        transitive = false
-    }
-}
-
-def configureSwtArtifacts = { Configuration configuration, Iterable<String> artifacts ->
+def configureWebViewArtifact = { String configurationName ->
+    def configuration = configurations.maybeCreate(configurationName)
     configuration.canBeConsumed = false
     configuration.canBeResolved = true
-    artifacts.each { swtArtifact ->
-        addSwtDependency(configuration.name, swtArtifact)
+    dependencies.add(configuration.name, webViewDependency) {
+        transitive = false
     }
+    configuration
 }
 
-def addHostSwtRuntime = { String runtimeConfigurationName = 'swtHostRuntime' ->
-    def runtimeConfiguration = configurations.maybeCreate(runtimeConfigurationName)
-    runtimeConfiguration.canBeConsumed = false
-    runtimeConfiguration.canBeResolved = true
-
-    // SWT source still compiles on macOS, although WKWebView is selected at runtime.
-    addSwtDependency('compileOnly', hostSwtArtifact)
-
-    if (stageHostSwt) {
-        addSwtDependency(runtimeConfiguration.name, hostSwtArtifact)
-        tasks.withType(JavaExec).configureEach {
-            classpath += runtimeConfiguration
-        }
-    }
-}
-
-def sha1Hex = { File file ->
-    def digest = java.security.MessageDigest.getInstance('SHA-1')
+def sha256Hex = { File file ->
+    def digest = java.security.MessageDigest.getInstance('SHA-256')
     file.withInputStream { stream ->
         byte[] buffer = new byte[8192]
         int read
@@ -89,31 +48,30 @@ def sha1Hex = { File file ->
     digest.digest().collect { String.format('%02x', it & 0xff) }.join()
 }
 
-ext.addSwtChecksumResource = { String configurationName = 'swtChecksumArtifacts' ->
-    def checksumConfiguration = configurations.maybeCreate(configurationName)
-    configureSwtArtifacts(checksumConfiguration, swtArtifacts)
-
-    def generatedSwtChecksumsDir = layout.buildDirectory.dir('generated/swt-checksums')
-    def checksumTask = tasks.register('generateSwtChecksums') {
-        inputs.property('swtVersion', swtVersion)
-        inputs.property('swtRuntimeRoot', swtRuntimeRoot)
-        inputs.property('swtArtifacts', swtArtifacts)
+ext.addWebliteChecksumResource = { String configurationName = 'webliteChecksumArtifact' ->
+    def checksumConfiguration = configureWebViewArtifact(configurationName)
+    def generatedChecksumsDir = layout.buildDirectory.dir('generated/weblite-checksums')
+    def checksumTask = tasks.register('generateWebliteChecksums') {
+        inputs.property('webViewVersion', webViewVersion)
+        inputs.property('webViewRuntimeRoot', webViewRuntimeRoot)
+        inputs.property('webViewEntries', webViewEntries)
         inputs.files(checksumConfiguration)
-        outputs.dir(generatedSwtChecksumsDir)
+        outputs.dir(generatedChecksumsDir)
 
         doLast {
-            def checksumFile = generatedSwtChecksumsDir.get().file(swtChecksumResourcePath).asFile
+            File artifact = checksumConfiguration.singleFile
+            def checksumFile = generatedChecksumsDir.get().file(webViewChecksumResourcePath).asFile
             checksumFile.parentFile.mkdirs()
             checksumFile.withWriter('UTF-8') { writer ->
-                writer.writeLine("version=${swtVersion}")
-                writer.writeLine("path=${swtRuntimeRoot}")
-                swtArtifacts.each { swtArtifact ->
-                    def swtFileName = swtJarFileName(swtArtifact)
-                    def swtFile = checksumConfiguration.files.find { it.name == swtFileName }
-                    if (swtFile == null) {
-                        throw new GradleException("Resolved SWT artifact not found: ${swtFileName}")
+                writer.writeLine("version=${webViewVersion}")
+                writer.writeLine("path=${webViewRuntimeRoot}")
+                webViewEntries.each { platform, entry ->
+                    File nativeFile = zipTree(artifact).matching { include entry }.singleFile
+                    if (!nativeFile.isFile()) {
+                        throw new GradleException("Weblite native entry not found: ${entry}")
                     }
-                    writer.writeLine("${swtArtifact}=${sha1Hex(swtFile)}")
+                    writer.writeLine("${platform}.entry=${entry}")
+                    writer.writeLine("${platform}.sha256=${sha256Hex(nativeFile)}")
                 }
             }
         }
@@ -121,35 +79,28 @@ ext.addSwtChecksumResource = { String configurationName = 'swtChecksumArtifacts'
 
     tasks.named('processResources') {
         dependsOn checksumTask
-        from(generatedSwtChecksumsDir)
+        from(generatedChecksumsDir)
     }
 }
 
 class HostBrowserRuntime {
-    String backend
-    boolean stageSwt
-    def swtConfiguration
-    String swtJarFileName
-    String swtRuntimePath
+    def webViewConfiguration
+    String nativeEntry
+    String nativeFileName
+    String runtimePath
 }
 
-ext.configureHostBrowserRuntime = { String configurationName = 'hostSwtBundle' ->
-    def swtConfiguration = null
-    if (stageHostSwt) {
-        swtConfiguration = configurations.maybeCreate(configurationName)
-        configureSwtArtifacts(swtConfiguration, [hostSwtArtifact])
-    }
-
+ext.configureHostBrowserRuntime = { String configurationName = 'hostWebliteBundle' ->
+    String platform = resolveHostWebViewPlatform()
+    String nativeEntry = webViewEntries[platform]
     new HostBrowserRuntime(
-            backend: hostBackend,
-            stageSwt: stageHostSwt,
-            swtConfiguration: swtConfiguration,
-            swtJarFileName: swtJarFileName(hostSwtArtifact),
-            swtRuntimePath: swtRuntimePath(hostSwtArtifact))
+            webViewConfiguration: configureWebViewArtifact(configurationName),
+            nativeEntry: nativeEntry,
+            nativeFileName: new File(nativeEntry).name,
+            runtimePath: "${webViewRuntimeRoot}/${webViewVersion}/${platform}")
 }
 
 ext.configureLauncherBrowser = {
-    dependencies.add('implementation', "ca.weblite:webview:${webViewVersion}")
-    project.ext.addSwtChecksumResource()
-    addHostSwtRuntime()
+    dependencies.add('implementation', webViewDependency)
+    project.ext.addWebliteChecksumResource()
 }

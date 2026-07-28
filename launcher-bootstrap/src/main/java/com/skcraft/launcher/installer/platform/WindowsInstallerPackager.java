@@ -41,6 +41,8 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
 
         ensureExists(appImageDir, "Windows app image not found");
         ensureExists(appImageDir.resolve(DATA_SUBDIR).resolve(LAUNCHER_DIR), "Missing bundled launcher directory");
+        ensureExists(appImageDir.resolve(DATA_SUBDIR).resolve("natives").resolve("weblite"),
+                "Missing bundled weblite host bridge");
         ensureExists(iconPng, "Launcher icon PNG not found");
         ensureExists(setupScript, "NSIS setup script not found");
         ensureExists(webView2Bootstrapper, "Missing WebView2 bootstrapper");

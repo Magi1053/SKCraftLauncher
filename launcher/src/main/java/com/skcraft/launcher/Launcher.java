@@ -486,9 +486,7 @@ public final class Launcher {
      */
     public static void main(final String[] args) {
         setupLogger();
-        if (BrowserBootstrap.prepare(args)) {
-            return;
-        }
+        BrowserBootstrap.prepare(args);
         WindowsAppIdentity.applyIfPresent();
         BrowserBootstrap.configureSwing();
 

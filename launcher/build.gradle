@@ -33,8 +33,13 @@ shadowJar {
     minimize {
         exclude(dependency('com.formdev:flatlaf:.*'))
         exclude(dependency('ca.weblite:webview:.*'))
+        exclude(dependency('net.java.dev.jna:jna:.*'))
+        exclude(dependency('net.java.dev.jna:jna-platform:.*'))
     }
     exclude 'module-info.class'
+    exclude 'windows_*/**'
+    exclude 'linux_*/**'
+    exclude 'osx_*/**'
 }
 
 processResources {

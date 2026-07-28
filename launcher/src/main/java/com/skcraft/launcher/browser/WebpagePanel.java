@@ -7,8 +7,7 @@
 package com.skcraft.launcher.browser;
 
 import com.formdev.flatlaf.FlatLaf;
-import com.skcraft.launcher.browser.mac.MacWkWebpageView;
-import com.skcraft.launcher.browser.swt.SwtWebpageView;
+import com.skcraft.launcher.browser.weblite.WebliteWebpageView;
 import com.skcraft.launcher.swing.SwingHelper;
 import lombok.extern.java.Log;
 
@@ -25,35 +24,14 @@ import java.util.logging.Level;
 public final class WebpagePanel extends JPanel {
 
     private URL url;
-    private String html;
     private boolean activated;
     private boolean darkTheme;
     private Border browserBorder = createDefaultBrowserBorder();
     private final boolean forceMissingBrowser;
     private BrowserView browserView;
 
-    public static WebpagePanel forURL(URL url) {
-        return new WebpagePanel(url);
-    }
-
-    public static WebpagePanel forHTML(String html) {
-        return new WebpagePanel(html);
-    }
-
     public static WebpagePanel missingBrowser() {
         return new WebpagePanel(true);
-    }
-
-    private WebpagePanel(URL url) {
-        this.forceMissingBrowser = false;
-        this.url = url;
-        initialize();
-    }
-
-    private WebpagePanel(String html) {
-        this.forceMissingBrowser = false;
-        this.html = html;
-        initialize();
     }
 
     public WebpagePanel() {
@@ -68,6 +46,7 @@ public final class WebpagePanel extends JPanel {
 
     private void initialize() {
         setLayout(new BorderLayout());
+        darkTheme = FlatLaf.isLafDark();
         activateBrowser();
     }
 
@@ -103,7 +82,7 @@ public final class WebpagePanel extends JPanel {
 
     private static Border createDefaultBrowserBorder() {
         Border border = UIManager.getBorder("ScrollPane.border");
-        return border != null ? border : BorderFactory.createEtchedBorder();
+        return border != null ? border : SwingHelper.uiLineBorder();
     }
 
     /**
@@ -119,7 +98,6 @@ public final class WebpagePanel extends JPanel {
         }
 
         this.url = url;
-        this.html = null;
 
         if (!activated) {
             activateBrowser();
@@ -139,16 +117,14 @@ public final class WebpagePanel extends JPanel {
         removeAll();
         browserView = BrowserViewFactory.create(this, forceMissingBrowser);
         add(browserView.getComponent(), BorderLayout.CENTER);
-        SwingHelper.removeOpaqueness(this);
+        setOpaque(false);
         browserView.setBrowserBorder(browserBorder);
         browserView.setDarkTheme(darkTheme);
 
         revalidate();
         repaint();
 
-        if (html != null) {
-            browserView.loadHtml(html);
-        } else if (url != null) {
+        if (url != null) {
             browserView.load(url);
         }
     }
@@ -164,15 +140,7 @@ public final class WebpagePanel extends JPanel {
             }
 
             try {
-                switch (BrowserRuntime.detectBackend()) {
-                    case WKWEBVIEW:
-                        return new MacWkWebpageView(parentComponent);
-                    case SWT:
-                        return new SwtWebpageView(parentComponent);
-                    default:
-                        throw new IllegalStateException(
-                                "Unsupported browser backend: " + BrowserRuntime.detectBackend());
-                }
+                return new WebliteWebpageView(parentComponent);
             } catch (LinkageError e) {
                 log.log(Level.WARNING, "Embedded browser is unavailable; news panel disabled", e);
                 return new MissingBrowserView(parentComponent);

@@ -12,12 +12,13 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.skcraft.launcher.LauncherException;
-import com.skcraft.launcher.util.Environment;
-import com.skcraft.launcher.util.Platform;
+import com.skcraft.launcher.browser.platform.BrowserPlatform;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
 import lombok.NonNull;
 import lombok.extern.java.Log;
+
+import com.formdev.flatlaf.util.HiDPIUtils;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -130,14 +131,7 @@ public final class SwingHelper {
     }
 
     public static void openURL(URI url) throws IOException {
-        try {
-            Desktop.getDesktop().browse(url);
-        } catch (UnsupportedOperationException e) {
-            if (Environment.detectPlatform() == Platform.LINUX) {
-                // Try xdg-open instead
-                Runtime.getRuntime().exec(new String[] { "xdg-open", url.toString() });
-            }
-        }
+        BrowserPlatform.current().openExternalUrl(url);
     }
 
     /**
@@ -418,7 +412,8 @@ public final class SwingHelper {
                     return;
                 }
 
-                // Prefer the human-readable launcher error; skip wrapper stacks (Futures, etc.).
+                // Prefer the human-readable launcher error; skip wrapper stacks (Futures,
+                // etc.).
                 LauncherException launcherException = findLauncherException(t);
                 String message;
                 Throwable details;
@@ -505,13 +500,24 @@ public final class SwingHelper {
     /**
      * 1px line border that reads {@code Component.borderColor} on each paint
      * so theme switches do not need {@code updateUI} border re-apply.
+     *
+     * <p>
+     * Painted with {@link HiDPIUtils} + {@code fillRect} sides — {@code drawRect}
+     * under fractional scale makes right/bottom look thicker than top/left.
      */
     public static Border uiLineBorder() {
         return new AbstractBorder() {
             @Override
             public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-                g.setColor(uiColor("Component.borderColor", Color.GRAY));
-                g.drawRect(x, y, width - 1, height - 1);
+                final Color color = uiColor("Component.borderColor", Color.GRAY);
+                HiDPIUtils.paintAtScale1x((Graphics2D) g, x, y, width, height,
+                        (g2, x2, y2, w2, h2, scaleFactor) -> {
+                            g2.setColor(color);
+                            g2.fillRect(x2, y2, w2, 1);
+                            g2.fillRect(x2, y2 + h2 - 1, w2, 1);
+                            g2.fillRect(x2, y2, 1, h2);
+                            g2.fillRect(x2 + w2 - 1, y2, 1, h2);
+                        });
             }
 
             @Override

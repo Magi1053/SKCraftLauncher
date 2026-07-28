@@ -135,12 +135,13 @@ tasks.register('assembleAppImage') {
             rename { launcherJarName }
         }
 
-        if (hostBrowser.stageSwt) {
-            copyFiles {
-                from(hostBrowser.swtConfiguration)
-                into(new File(bootstrapDir, hostBrowser.swtRuntimePath))
-                rename { hostBrowser.swtJarFileName }
+        copyFiles {
+            from(zipTree(hostBrowser.webViewConfiguration.singleFile)) {
+                include(hostBrowser.nativeEntry)
+                eachFile { details -> details.path = hostBrowser.nativeFileName }
+                includeEmptyDirs = false
             }
+            into(new File(bootstrapDir, hostBrowser.runtimePath))
         }
 
         File launcherPayloadDir = new File(bootstrapDir, 'launcher')
@@ -222,8 +223,8 @@ tasks.register('createWindowsLauncher', Exec) {
             into(new File(bootstrapDir, 'launcher'))
         }
         copyFiles {
-            from(new File(stagedAppImage, "bootstrap/${hostBrowser.swtRuntimePath}"))
-            into(new File(bootstrapDir, hostBrowser.swtRuntimePath))
+            from(new File(stagedAppImage, "bootstrap/${hostBrowser.runtimePath}"))
+            into(new File(bootstrapDir, hostBrowser.runtimePath))
         }
     }
 }
