@@ -15,6 +15,7 @@ import com.skcraft.launcher.auth.MicrosoftLoginService;
 import com.skcraft.launcher.auth.Session;
 import com.skcraft.launcher.swing.LinkButton;
 import com.skcraft.launcher.swing.SwingHelper;
+import com.skcraft.launcher.swing.SwingIcons;
 import com.skcraft.launcher.util.QrCodes;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
@@ -28,11 +29,9 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
 
 import static com.skcraft.launcher.util.SharedLocale.tr;
 
@@ -51,8 +50,8 @@ public class MicrosoftLoginDialog extends JDialog {
 	private static final int QR_PADDING = 2;
 	private static final int CODE_FIELD_FONT_SIZE = 32;
 	private static final int COPY_ICON_SIZE = 18;
-	private static final Icon COPY_ICON = createCopyIcon(COPY_ICON_SIZE);
-	private static final Icon COPIED_ICON = createCopiedIcon(COPY_ICON_SIZE);
+	private static final Icon COPY_ICON = SwingIcons.copy(COPY_ICON_SIZE);
+	private static final Icon COPIED_ICON = SwingIcons.check(COPY_ICON_SIZE);
 
 	private final Launcher launcher;
 	private final MicrosoftLoginService.DeviceCodeDetails details;
@@ -194,36 +193,32 @@ public class MicrosoftLoginDialog extends JDialog {
 		codeField.setFont(new Font(Font.MONOSPACED, Font.BOLD, CODE_FIELD_FONT_SIZE));
 		codeField.setColumns(Math.max(8, details.getUserCode().length() + 1));
 		codeField.setBorder(new EmptyBorder(10, 16, 10, 8));
-		Color codeBorderColor = SwingHelper.uiColor("Component.borderColor", new Color(160, 160, 160));
 		Color codeBackground = SwingHelper.uiColor("TextField.background", Color.WHITE);
 		codeField.setBackground(codeBackground);
 		JPanel codeBox = new JPanel(new BorderLayout(0, 0));
 		codeBox.setBackground(codeBackground);
-		codeBox.setBorder(BorderFactory.createLineBorder(codeBorderColor));
+		codeBox.setBorder(SwingHelper.uiLineBorder());
 		copyCodeButton.setBackground(codeBackground);
 		codeBox.add(codeField, BorderLayout.CENTER);
 		codeBox.add(copyCodeButton, BorderLayout.EAST);
 
-		JLabel prefix = new JLabel(tr("login.microsoft.device.browserHintPrefix"));
+		String[] hintParts = tr("login.microsoft.device.browserHint").split("\\{0\\}", 2);
+
+		JLabel prefix = new JLabel(hintParts[0]);
 		prefix.setForeground(mutedColor);
 
 		String linkText = verificationUri != null ? verificationUri : "";
 		LinkButton link = new LinkButton(linkText);
 		link.setFont(prefix.getFont());
-		link.addActionListener(ev -> {
-			if (verificationUri != null && !verificationUri.isEmpty()) {
-				SwingHelper.openURL(verificationUri, this);
-			}
-		});
+		if (verificationUri != null && !verificationUri.isEmpty()) {
+			link.addActionListener(ev -> SwingHelper.openURL(verificationUri, this));
+		}
 
-		JPanel openRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
-		openRow.setOpaque(false);
+		JPanel openRow = new JPanel(new MigLayout("insets 0, gapx 0"));
 		openRow.add(prefix);
 		openRow.add(link);
 
-		int rightWidth = Math.max(openRow.getPreferredSize().width, codeBox.getPreferredSize().width);
-
-		JTextArea suffix = new JTextArea(tr("login.microsoft.device.browserHintSuffix"));
+		JTextArea suffix = new JTextArea(hintParts.length > 1 ? hintParts[1].trim() : "");
 		suffix.setEditable(false);
 		suffix.setFocusable(false);
 		suffix.setOpaque(false);
@@ -233,13 +228,11 @@ public class MicrosoftLoginDialog extends JDialog {
 		suffix.setFont(prefix.getFont());
 		suffix.setForeground(mutedColor);
 
-		JPanel instructions = new JPanel(new MigLayout("insets 0, wrap 1, gapy 2", "[" + rightWidth + "!]"));
-		instructions.add(openRow, "growx");
-		instructions.add(suffix, "growx, w " + rightWidth + "!");
-
-		JPanel right = new JPanel(new MigLayout("insets 0, wrap 1, gapy 10", "[" + rightWidth + "!]"));
-		right.add(instructions, "growx");
-		right.add(codeBox, "alignx left");
+		int rightWidth = Math.max(openRow.getPreferredSize().width, codeBox.getPreferredSize().width);
+		JPanel right = new JPanel(new MigLayout("insets 0, wrap 1, gapy 2", "[" + rightWidth + "!]"));
+		right.add(openRow, "growx");
+		right.add(suffix, "growx");
+		right.add(codeBox, "gaptop 8, alignx left");
 
 		qrLabel.setHorizontalAlignment(SwingConstants.CENTER);
 		qrLabel.setVerticalAlignment(SwingConstants.CENTER);
@@ -342,8 +335,7 @@ public class MicrosoftLoginDialog extends JDialog {
 	private void handleCodeExpired() {
 		codeExpired = true;
 		countdownTimer.stop();
-		countdownLabel.setText(tr("login.microsoft.device.timeExpired"));
-		countdownLabel.setForeground(SwingHelper.uiColor("Component.error.focusedBorderColor", Color.RED.darker()));
+		countdownLabel.setText(" ");
 		statusLabel.setText(tr("login.microsoft.device.expiredStatus"));
 		pollIndicator.setIndeterminate(false);
 		pollIndicator.setVisible(false);
@@ -411,47 +403,6 @@ public class MicrosoftLoginDialog extends JDialog {
 		return button;
 	}
 
-	private static Icon createCopyIcon(int size) {
-		return paintIcon(size, g -> {
-			Color stroke = new Color(55, 55, 55);
-			g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-			int pad = Math.max(2, size / 9);
-			int w = size - pad * 2 - 3;
-			int h = size - pad * 2 - 3;
-			int arc = 3;
-			g.setColor(stroke);
-			g.drawRoundRect(pad + 3, pad, w, h, arc, arc);
-			g.setColor(new Color(240, 240, 240));
-			g.fillRoundRect(pad, pad + 3, w, h, arc, arc);
-			g.setColor(stroke);
-			g.drawRoundRect(pad, pad + 3, w, h, arc, arc);
-		});
-	}
-
-	private static Icon createCopiedIcon(int size) {
-		return paintIcon(size, g -> {
-			g.setColor(new Color(34, 139, 34));
-			g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-			Path2D check = new Path2D.Float();
-			check.moveTo(size * 0.2, size * 0.52);
-			check.lineTo(size * 0.42, size * 0.72);
-			check.lineTo(size * 0.8, size * 0.32);
-			g.draw(check);
-		});
-	}
-
-	private static Icon paintIcon(int size, Consumer<Graphics2D> painter) {
-		BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = image.createGraphics();
-		try {
-			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-			painter.accept(g);
-		} finally {
-			g.dispose();
-		}
-		return new ImageIcon(image);
-	}
-
 	/**
 	 * Run the full Microsoft device-code sign in flow as a modal dialog.
 	 *
@@ -469,7 +420,8 @@ public class MicrosoftLoginDialog extends JDialog {
 				.submit(() -> launcher.getMicrosoftLogin().requestDeviceCodeDetails());
 
 		SettableProgress progress = new SettableProgress(tr("login.microsoft.device.starting"), -1);
-		ProgressDialog.showProgress(owner, fetchFuture, progress, tr("login.microsoft.device.fetchingTitle"), tr("login.microsoft.device.starting"));
+		ProgressDialog.showProgress(owner, fetchFuture, progress, tr("login.microsoft.device.fetchingTitle"),
+				tr("login.microsoft.device.starting"));
 
 		MicrosoftLoginService.DeviceCodeDetails details;
 		try {
@@ -511,8 +463,7 @@ public class MicrosoftLoginDialog extends JDialog {
 			setMaximumSize(new Dimension(size, size));
 			setOpaque(true);
 			setBackground(UIManager.getColor("Panel.background"));
-			setBorder(BorderFactory.createLineBorder(
-					SwingHelper.uiColor("Component.borderColor", new Color(200, 200, 200))));
+			setBorder(SwingHelper.uiLineBorder());
 			spinTimer = new Timer(30, ev -> {
 				arcStart = (arcStart - 12 + 360) % 360;
 				repaint();

@@ -504,6 +504,8 @@ public final class SwingHelper {
      * <p>
      * Painted with {@link HiDPIUtils} + {@code fillRect} sides — {@code drawRect}
      * under fractional scale makes right/bottom look thicker than top/left.
+     * Put this border on the same component that paints fills/hovers; do not use
+     * {@link BorderFactory#createLineBorder} for panel borders.
      */
     public static Border uiLineBorder() {
         return new AbstractBorder() {

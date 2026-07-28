@@ -6,6 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.skcraft.concurrency.ObservableFuture;
 import com.skcraft.concurrency.ProgressObservable;
 import com.skcraft.concurrency.SettableProgress;
+import com.skcraft.launcher.Configuration;
 import com.skcraft.launcher.Launcher;
 import com.skcraft.launcher.auth.*;
 import com.skcraft.launcher.persistence.Persistence;
@@ -35,6 +36,7 @@ import java.util.concurrent.Executor;
 public class AccountSelectDialog extends JDialog {
 	private static final int ACTION_ICON_SIZE = 14;
 	private static final int TITLE_SUBTITLE_GAP = 0;
+	private static final int VISIBLE_ACCOUNT_ROWS = 3;
 	private static final String OFFLINE_USERNAME_PATTERN = "[A-Za-z0-9_]{3,16}";
 
 	private final JList<SavedSession> accountList;
@@ -59,14 +61,11 @@ public class AccountSelectDialog extends JDialog {
 		this.manageOnly = manageOnly;
 		this.accountList = new JList<>(launcher.getAccounts());
 		this.loginButton = new JButton(SharedLocale.tr(manageOnly ? "accounts.useAccount" : "accounts.play"));
-		boolean offlineEnabled = launcher.getConfig().isOfflineEnabled();
-		offlineButton.setVisible(offlineEnabled);
-		offlineButton.setEnabled(offlineEnabled);
 
 		setTitle(SharedLocale.tr(manageOnly ? "accounts.manageTitle" : "accounts.title"));
 		initComponents();
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-		setMinimumSize(new Dimension(480, 280));
+		setMinimumSize(new Dimension(520, 280));
 		setResizable(false);
 		pack();
 		setLocationRelativeTo(owner);
@@ -74,11 +73,11 @@ public class AccountSelectDialog extends JDialog {
 
 	private void initComponents() {
 		setLayout(new BorderLayout());
-		Border panelBorder = BorderFactory.createLineBorder(SwingHelper.uiColor("Component.borderColor", Color.GRAY));
+		Border panelBorder = SwingHelper.uiLineBorder();
 
 		accountList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		accountList.setLayoutOrientation(JList.VERTICAL);
-		accountList.setVisibleRowCount(0);
+		accountList.setVisibleRowCount(VISIBLE_ACCOUNT_ROWS);
 		accountList.setCellRenderer(new AccountRenderer());
 		accountList.setFixedCellHeight(46);
 		accountList.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -93,18 +92,22 @@ public class AccountSelectDialog extends JDialog {
 		accountList.addListSelectionListener(ev -> updateActionState());
 
 		JScrollPane accountPane = new JScrollPane(accountList);
-		accountPane.setPreferredSize(new Dimension(280, 150));
 		accountPane.setAlignmentX(Component.LEFT_ALIGNMENT);
 		accountPane.setBorder(panelBorder);
+		Insets listInsets = accountList.getInsets();
+		Insets paneInsets = accountPane.getInsets();
+		int accountListHeight = VISIBLE_ACCOUNT_ROWS * InstanceRowStyle.ROW_HEIGHT
+				+ listInsets.top + listInsets.bottom
+				+ paneInsets.top + paneInsets.bottom;
+		accountPane.setPreferredSize(new Dimension(280, accountListHeight));
 
 		loginButton.setFont(loginButton.getFont().deriveFont(Font.BOLD));
 		SwingHelper.styleDialogButton(cancelButton);
 		SwingHelper.styleDialogButton(loginButton);
 		SwingHelper.styleDialogButton(offlineButton);
 		SwingHelper.updateDialogButtonCursor(offlineButton);
-		SwingHelper.alignButtonSizes(cancelButton, loginButton);
 
-		buttonsPanel.setBorder(BorderFactory.createEmptyBorder(26, 13, 13, 13));
+		buttonsPanel.setBorder(BorderFactory.createEmptyBorder(8, 13, 13, 13));
 		buttonsPanel.addElement(offlineButton);
 		buttonsPanel.addGlue();
 		buttonsPanel.addElement(cancelButton);
@@ -169,6 +172,8 @@ public class AccountSelectDialog extends JDialog {
 
 		selectActiveAccount();
 		getRootPane().setDefaultButton(loginButton);
+		// Align after default-button styling so FlatLaf padding doesn't truncate the label.
+		SwingHelper.alignButtonSizes(cancelButton, loginButton);
 		updateActionState();
 	}
 
@@ -187,13 +192,14 @@ public class AccountSelectDialog extends JDialog {
 	private JPanel createHeaderPanel() {
 		JPanel headerPanel = new JPanel(new GridBagLayout());
 		headerPanel.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createLineBorder(SwingHelper.uiColor("Component.borderColor", Color.GRAY)),
+				SwingHelper.uiLineBorder(),
 				new EmptyBorder(12, 12, 12, 12)));
 
 		JLabel titleLabel = new JLabel(SharedLocale.tr(manageOnly ? "accounts.manageTitle" : "accounts.title"));
 		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, titleLabel.getFont().getSize2D() + 1f));
 
-		JLabel subtitleLabel = new JLabel(SharedLocale.tr(manageOnly ? "accounts.manageSubtitle" : "accounts.subtitle"));
+		JLabel subtitleLabel = new JLabel(
+				SharedLocale.tr(manageOnly ? "accounts.manageSubtitle" : "accounts.subtitle"));
 		subtitleLabel.setForeground(SwingHelper.uiColor("Label.disabledForeground", Color.DARK_GRAY));
 
 		GridBagConstraints constraints = new GridBagConstraints();
@@ -234,7 +240,8 @@ public class AccountSelectDialog extends JDialog {
 	}
 
 	private static JButton createForgetAccountButton() {
-		JButton button = new JButton(SharedLocale.tr("accounts.removeSelected"), createForgetIcon(ACTION_ICON_SIZE, false));
+		JButton button = new JButton(SharedLocale.tr("accounts.removeSelected"),
+				createForgetIcon(ACTION_ICON_SIZE, false));
 		button.setToolTipText(SharedLocale.tr("accounts.forgetTooltip"));
 		button.setIconTextGap(8);
 		return button;
@@ -339,7 +346,8 @@ public class AccountSelectDialog extends JDialog {
 	}
 
 	/**
-	 * Resolve a session for launching: restore the active account, or Microsoft sign-in if none.
+	 * Resolve a session for launching: restore the active account, or Microsoft
+	 * sign-in if none.
 	 */
 	public static Session showAccountRequest(Window owner, Launcher launcher) {
 		SavedSession active = launcher.getAccounts().getActiveAccount();
@@ -440,6 +448,12 @@ public class AccountSelectDialog extends JDialog {
 		SavedSession cleaned = new OfflineSession(offlineAccount.getUsername()).toSavedSession();
 		launcher.getAccounts().putOfflineAccount(cleaned);
 		Persistence.commitAndForget(launcher.getAccounts());
+
+		Configuration config = launcher.getConfig();
+		if (!config.isOfflineEnabled()) {
+			config.setOfflineEnabled(true);
+			Persistence.commitAndForget(config);
+		}
 		return cleaned;
 	}
 

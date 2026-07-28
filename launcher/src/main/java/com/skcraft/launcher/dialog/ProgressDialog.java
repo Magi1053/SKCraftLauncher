@@ -12,15 +12,12 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.skcraft.concurrency.ObservableFuture;
 import com.skcraft.concurrency.ProgressObservable;
 import com.skcraft.launcher.swing.LinedBoxPanel;
-import com.skcraft.launcher.swing.SwingHelper;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
 import lombok.extern.java.Log;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.lang.ref.WeakReference;
@@ -62,10 +59,8 @@ public class ProgressDialog extends JDialog {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent event) {
-                if (confirmCancel()) {
-                    cancel();
-                    dispose();
-                }
+                cancel();
+                dispose();
             }
         });
     }
@@ -113,33 +108,14 @@ public class ProgressDialog extends JDialog {
         add(buttonsPanel, BorderLayout.SOUTH);
 
         textAreaPanel.setVisible(false);
-        cancelButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (confirmCancel()) {
-                    cancel();
-                    dispose();
-                }
-            }
+        cancelButton.addActionListener(e -> {
+            cancel();
+            dispose();
         });
 
-        detailsButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                toggleDetails();
-            }
-        });
+        detailsButton.addActionListener(e -> toggleDetails());
 
-        logButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                ConsoleFrame.showMessages();
-            }
-        });
-    }
-
-    private boolean confirmCancel() {
-        return SwingHelper.confirmDialog(this, SharedLocale.tr("progress.confirmCancel"), SharedLocale.tr("progress.confirmCancelTitle"));
+        logButton.addActionListener(e -> ConsoleFrame.showMessages());
     }
 
     protected void cancel() {

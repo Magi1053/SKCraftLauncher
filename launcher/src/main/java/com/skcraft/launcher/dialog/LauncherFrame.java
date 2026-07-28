@@ -110,21 +110,20 @@ public class LauncherFrame extends JFrame {
         // Border lives on the outer panel; keep the embedded browser borderless.
         webView.setBrowserBorder(BorderFactory.createEmptyBorder());
 
-        JPanel instancesChrome = new TableChromePanel(new BorderLayout());
-        instancesChrome.setBorder(SwingHelper.uiLineBorder());
-        instancesChrome.add(instancesPanel, BorderLayout.CENTER);
+        JPanel instancesBox = new TableBackgroundPanel(new BorderLayout());
+        instancesBox.setBorder(SwingHelper.uiLineBorder());
+        instancesBox.add(instancesPanel, BorderLayout.CENTER);
 
-        JPanel accountChrome = new TableChromePanel(new BorderLayout());
-        accountChrome.setBorder(SwingHelper.uiLineBorder());
-        accountChrome.add(accountSwitcher, BorderLayout.CENTER);
+        JPanel accountBox = new TableBackgroundPanel(new BorderLayout());
+        accountBox.add(accountSwitcher, BorderLayout.CENTER);
 
         // Same related gap as contentPanel left/news columns.
         JPanel leftColumn = new JPanel(new MigLayout("ins 0, fill", "[grow, fill]", "[grow, fill][]"));
         leftColumn.setOpaque(false);
-        leftColumn.add(instancesChrome, "grow, wrap");
-        leftColumn.add(accountChrome, "growx");
+        leftColumn.add(instancesBox, "grow, wrap");
+        leftColumn.add(accountBox, "growx");
 
-        JPanel newsPanel = new TableChromePanel(new BorderLayout());
+        JPanel newsPanel = new TableBackgroundPanel(new BorderLayout());
         newsPanel.setBorder(SwingHelper.uiLineBorder());
         newsPanel.add(webView, BorderLayout.CENTER);
 
@@ -260,7 +259,7 @@ public class LauncherFrame extends JFrame {
         final JLabel label = new JLabel(SharedLocale.tr("launcher.noInstances"));
         label.setHorizontalAlignment(SwingConstants.CENTER);
 
-        JPanel panel = new TableChromePanel(new GridBagLayout()) {
+        JPanel panel = new TableBackgroundPanel(new GridBagLayout()) {
             @Override
             public void updateUI() {
                 super.updateUI();

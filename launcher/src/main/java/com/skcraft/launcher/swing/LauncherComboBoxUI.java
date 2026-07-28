@@ -16,7 +16,7 @@ import java.awt.Graphics2D;
 
 /**
  * FlatMac paints up+down chevrons on non-editable combos and overlays the popup
- * on the field. Keep mac button chrome, but use a single down arrow and pop down
+ * on the field. Keep mac button look, but use a single down arrow and pop down
  * below the combo (same as editable FlatMac combos / Aqua isPopDown).
  */
 public class LauncherComboBoxUI extends FlatComboBoxUI {

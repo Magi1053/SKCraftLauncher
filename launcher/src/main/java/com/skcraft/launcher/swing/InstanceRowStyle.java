@@ -10,12 +10,12 @@ import javax.swing.UIManager;
 import java.awt.Font;
 
 /**
- * Shared chrome for instance table rows and the account switcher content row.
+ * Shared metrics for instance table rows and the account switcher content row.
  * Keep these in sync so the two UIs cannot drift.
  */
 public final class InstanceRowStyle {
 
-    /** {@link InstanceTable} / content-row chrome height. */
+    /** {@link InstanceTable} / content-row height. */
     public static final int ROW_HEIGHT = 48;
     /** Instance / avatar icon edge length. */
     public static final int ICON_SIZE = 32;

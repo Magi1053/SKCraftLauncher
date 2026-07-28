@@ -13,6 +13,8 @@ import com.skcraft.launcher.util.SharedLocale;
 import lombok.NonNull;
 
 import javax.swing.*;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -24,26 +26,17 @@ import java.util.List;
 /**
  * Footer control for viewing and changing the active launch account.
  *
- * <p>Layout mirrors {@link InstanceTableCellRenderer} for the content row.
- * The divider is a separate NORTH strip — it does not share insets with the
- * content row, so it cannot steal from the {@link InstanceRowStyle#ROW_HEIGHT}
- * chrome.
- *
- * <pre>
- *   separator strip:  SEPARATOR_TOP_MARGIN + SEPARATOR_THICKNESS  (extra)
- *   content row:      InstanceRowStyle.ROW_HEIGHT (= 48) — same as InstanceTable
- * </pre>
+ * <p>
+ * Layout mirrors {@link InstanceTableCellRenderer} for the content row.
+ * Height locked to {@link InstanceRowStyle#ROW_HEIGHT}.
  */
 public class AccountSwitcher extends JPanel {
-
-    /** Air above the divider line only (none below — content row owns its own top inset). */
-    private static final int SEPARATOR_TOP_MARGIN = 6;
-    private static final int SEPARATOR_THICKNESS = 1;
 
     private final AccountList accounts;
     /**
      * Exact twin of {@link InstanceTableCellRenderer} root: EmptyBorder(VERTICAL,
-     * SIDE) around the icon+text panel. Height locked to {@link InstanceRowStyle#ROW_HEIGHT}.
+     * SIDE) around the icon+text panel. Height locked to
+     * {@link InstanceRowStyle#ROW_HEIGHT}.
      */
     private final JPanel contentRow = new JPanel(new BorderLayout()) {
         @Override
@@ -67,7 +60,6 @@ public class AccountSwitcher extends JPanel {
             return maximum;
         }
     };
-    private final JPanel separatorStrip = new JPanel(new BorderLayout());
     private final JPanel accountPanel = new JPanel(new BorderLayout(InstanceRowStyle.ICON_TEXT_GAP, 0));
     private final JPanel textPanel = new JPanel(new GridBagLayout());
     private final JLabel avatarLabel = new JLabel();
@@ -83,17 +75,13 @@ public class AccountSwitcher extends JPanel {
         this.defaultHead = SwingHelper.createIcon(Launcher.class, "default_skin.png",
                 InstanceRowStyle.ICON_SIZE, InstanceRowStyle.ICON_SIZE);
 
-        // Never opaque: translucent hover must be painted manually (setOpaque(true) +
-        // alpha Color leaves uncleared ghosts — double text / stale subtitles).
         setOpaque(false);
+        setBorder(SwingHelper.uiLineBorder());
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setToolTipText(SharedLocale.tr("accounts.manageTitle"));
-        setBorder(null);
 
-        buildSeparatorStrip();
         buildContentRow();
 
-        add(separatorStrip, BorderLayout.NORTH);
         add(contentRow, BorderLayout.CENTER);
 
         MouseAdapter interaction = new MouseAdapter() {
@@ -120,6 +108,22 @@ public class AccountSwitcher extends JPanel {
         addMouseListener(interaction);
         addMouseListenerToAccountControls(interaction);
 
+        accounts.addListDataListener(new ListDataListener() {
+            @Override
+            public void intervalAdded(ListDataEvent e) {
+                refresh();
+            }
+
+            @Override
+            public void intervalRemoved(ListDataEvent e) {
+                refresh();
+            }
+
+            @Override
+            public void contentsChanged(ListDataEvent e) {
+                refresh();
+            }
+        });
         refresh();
     }
 
@@ -135,9 +139,6 @@ public class AccountSwitcher extends JPanel {
     public void updateUI() {
         super.updateUI();
         // Child fields are still null when JPanel's constructor invokes updateUI().
-        if (separatorStrip != null) {
-            applySeparatorColor();
-        }
         if (usernameLabel != null) {
             usernameLabel.setFont(InstanceRowStyle.titleFont());
         }
@@ -151,36 +152,39 @@ public class AccountSwitcher extends JPanel {
     @Override
     public Dimension getPreferredSize() {
         Dimension preferred = super.getPreferredSize();
-        preferred.height = separatorStripHeight() + InstanceRowStyle.ROW_HEIGHT;
+        preferred.height = rowHeightWithInsets();
         return preferred;
     }
 
     @Override
     public Dimension getMinimumSize() {
         Dimension minimum = super.getMinimumSize();
-        minimum.height = separatorStripHeight() + InstanceRowStyle.ROW_HEIGHT;
+        minimum.height = rowHeightWithInsets();
         return minimum;
     }
 
     @Override
     public Dimension getMaximumSize() {
         Dimension maximum = super.getMaximumSize();
-        maximum.height = separatorStripHeight() + InstanceRowStyle.ROW_HEIGHT;
+        maximum.height = rowHeightWithInsets();
         return maximum;
+    }
+
+    private int rowHeightWithInsets() {
+        Insets insets = getInsets();
+        return InstanceRowStyle.ROW_HEIGHT + insets.top + insets.bottom;
     }
 
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        // Paint hover only over the content row (same 48px chrome as an instance cell).
         if (!hovered) {
             return;
         }
         Graphics2D g2 = (Graphics2D) g.create();
         try {
-            Rectangle bounds = contentRow.getBounds();
             g2.setColor(getHoverBackground());
-            g2.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+            g2.fillRect(0, 0, getWidth(), getHeight());
         } finally {
             g2.dispose();
         }
@@ -210,41 +214,8 @@ public class AccountSwitcher extends JPanel {
         repaint();
     }
 
-    private void buildSeparatorStrip() {
-        separatorStrip.setOpaque(false);
-        separatorStrip.setBorder(BorderFactory.createEmptyBorder(SEPARATOR_TOP_MARGIN, 0, 0, 0));
-        JComponent line = new JComponent() {
-            @Override
-            public Dimension getPreferredSize() {
-                return new Dimension(1, SEPARATOR_THICKNESS);
-            }
-
-            @Override
-            public Dimension getMinimumSize() {
-                return getPreferredSize();
-            }
-
-            @Override
-            public Dimension getMaximumSize() {
-                return new Dimension(Integer.MAX_VALUE, SEPARATOR_THICKNESS);
-            }
-
-            @Override
-            protected void paintComponent(Graphics g) {
-                g.setColor(getSeparatorColor());
-                g.fillRect(0, 0, getWidth(), getHeight());
-            }
-        };
-        separatorStrip.add(line, BorderLayout.CENTER);
-        // Lock strip height so BorderLayout cannot fold it into the content row.
-        Dimension stripSize = new Dimension(1, separatorStripHeight());
-        separatorStrip.setPreferredSize(stripSize);
-        separatorStrip.setMinimumSize(stripSize);
-        separatorStrip.setMaximumSize(new Dimension(Integer.MAX_VALUE, separatorStripHeight()));
-    }
-
     private void buildContentRow() {
-        // Same outer chrome as InstanceTableCellRenderer root.
+        // Same outer insets as InstanceTableCellRenderer root.
         contentRow.setOpaque(false);
         contentRow.setBorder(BorderFactory.createEmptyBorder(
                 InstanceRowStyle.VERTICAL_INSET, InstanceRowStyle.SIDE_INSET,
@@ -316,22 +287,6 @@ public class AccountSwitcher extends JPanel {
         for (ActionListener listener : actionListeners) {
             listener.actionPerformed(event);
         }
-    }
-
-    private void applySeparatorColor() {
-        separatorStrip.repaint();
-    }
-
-    private static int separatorStripHeight() {
-        return SEPARATOR_TOP_MARGIN + SEPARATOR_THICKNESS;
-    }
-
-    private static Color getSeparatorColor() {
-        Color separator = UIManager.getColor("Component.borderColor");
-        if (separator == null) {
-            separator = UIManager.getColor("Separator.foreground");
-        }
-        return separator != null ? separator : Color.GRAY;
     }
 
     private static Color getHoverBackground() {

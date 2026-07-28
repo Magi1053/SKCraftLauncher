@@ -12,9 +12,9 @@ import java.awt.*;
 /**
  * Panel that keeps {@code Table.background} after FlatLaf theme switches.
  */
-public class TableChromePanel extends JPanel {
+public class TableBackgroundPanel extends JPanel {
 
-    public TableChromePanel(LayoutManager layout) {
+    public TableBackgroundPanel(LayoutManager layout) {
         super(layout);
     }
 

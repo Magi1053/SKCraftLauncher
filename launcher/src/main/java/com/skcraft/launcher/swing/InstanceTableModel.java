@@ -91,7 +91,8 @@ public class InstanceTableModel extends AbstractTableModel {
 
     public Icon getIcon(Instance instance) {
         if (!instance.isLocal()) {
-            return downloadIcon;
+            Icon remote = iconCache.get(instance.getIconUrl());
+            return remote != null ? remote : downloadIcon;
         } else if (instance.getManifestURL() != null) {
             Icon remote = iconCache.get(instance.getIconUrl());
             return remote != null ? remote : instanceIcon;
