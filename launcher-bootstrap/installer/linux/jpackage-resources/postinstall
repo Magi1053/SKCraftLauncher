@@ -30,14 +30,16 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME_DIR/.local/share}"
 DATA_DIR="$DATA_HOME/@LINUX_DATA_DIR@"
 NATIVES_DIR="$DATA_DIR/natives"
 
+@LEGACY_MIGRATION@
+
 mkdir -p "$DATA_DIR"
 rm -rf "$DATA_DIR/launcher"
 cp -R "$APP_SOURCE/bootstrap/launcher" "$DATA_DIR/launcher"
 
-if [ -d "$APP_SOURCE/bootstrap/natives/swt" ]; then
+if [ -d "$APP_SOURCE/bootstrap/natives/weblite" ]; then
   mkdir -p "$NATIVES_DIR"
-  rm -rf "$NATIVES_DIR/swt"
-  cp -R "$APP_SOURCE/bootstrap/natives/swt" "$NATIVES_DIR/swt"
+  rm -rf "$NATIVES_DIR/weblite"
+  cp -R "$APP_SOURCE/bootstrap/natives/weblite" "$NATIVES_DIR/weblite"
 fi
 
 if command -v chown >/dev/null 2>&1 && [ "$TARGET_USER" != "root" ]; then

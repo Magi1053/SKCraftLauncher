@@ -1,4 +1,4 @@
-; --- Includes ---
+﻿; --- Includes ---
 
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
@@ -89,29 +89,30 @@ Section "${AppName}" SEC_MAIN
 	SetOutPath "$DataDir\launcher"
 	File /r "${AppImageDir}\bootstrap\launcher\*"
 	!insertmacro LogInstalledPath "$DataDir\launcher"
-	Goto installSwt
+	Goto installWeblite
 
 	keepLauncher:
 	!insertmacro DetailPrintLog "Keeping existing launcher cache (installed version/update URL policy keeps local files)."
 
-	installSwt:
-	!insertmacro DetailPrintLog "Installing SWT runtime jar."
-	SetOutPath "$DataDir\${NativesSubdir}\swt"
-	File /r "${AppImageDir}\bootstrap\natives\swt\*"
-	!insertmacro LogInstalledPath "$DataDir\${NativesSubdir}\swt"
+	installWeblite:
+	!insertmacro DetailPrintLog "Installing weblite host bridge."
+	RMDir /r "$DataDir\${NativesSubdir}\weblite"
+	SetOutPath "$DataDir\${NativesSubdir}\weblite"
+	File /r "${AppImageDir}\bootstrap\natives\weblite\*"
+	!insertmacro LogInstalledPath "$DataDir\${NativesSubdir}\weblite"
 
 	IfFileExists "$DataDir\launcher\*.*" 0 missingLauncherDir
 	!insertmacro DetailPrintLogSuffix "Launcher jar present at " "$DataDir\launcher"
-	IfFileExists "$DataDir\${NativesSubdir}\swt\*.*" 0 missingSwtDir
-	!insertmacro DetailPrintLogSuffix "SWT runtime payload present at " "$DataDir\${NativesSubdir}\swt"
+	IfFileExists "$DataDir\${NativesSubdir}\weblite\*.*" 0 missingWebliteDir
+	!insertmacro DetailPrintLogSuffix "Weblite host bridge present at " "$DataDir\${NativesSubdir}\weblite"
 	Goto appPayloadDone
 
 	missingLauncherDir:
 	!insertmacro DetailPrintLog "Bundled launcher directory was not found."
 	Abort
 
-	missingSwtDir:
-	!insertmacro DetailPrintLog "SWT runtime payload was not found."
+	missingWebliteDir:
+	!insertmacro DetailPrintLog "Weblite host bridge was not found."
 	Abort
 
 	appPayloadDone:

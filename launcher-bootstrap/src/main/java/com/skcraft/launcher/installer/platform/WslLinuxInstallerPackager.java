@@ -12,16 +12,16 @@ public final class WslLinuxInstallerPackager extends InstallerPackager.Platform 
 
     @Override
     public void run(String[] args) throws Exception {
-        if (args.length < 5) {
+        if (args.length < 4) {
             throw new IllegalArgumentException(
-                    "Usage: InstallerPackager wsl-linux <repoDir> <version> <buildDeb> <displayAppName> <installDirName> [distro]");
+                    "Usage: InstallerPackager wsl-linux <repoDir> <version> <displayAppName> <installDirName> [distro]");
         }
-        packageLinuxFromWsl(Paths.get(args[0]), args[1], parseBooleanFlag(args[2]),
-                normalizePackageAppName(args[3]), normalizeInstallDirName(args[4]),
-                args.length >= 6 ? args[5] : "");
+        packageLinuxFromWsl(Paths.get(args[0]), args[1],
+                normalizePackageAppName(args[2]), normalizeInstallDirName(args[3]),
+                args.length >= 5 ? args[4] : "");
     }
 
-    private void packageLinuxFromWsl(Path repoDir, String version, boolean buildDeb, String displayAppName,
+    private void packageLinuxFromWsl(Path repoDir, String version, String displayAppName,
             String linuxInstallDirName, String distro) throws Exception {
         String wsl = findOnPath("wsl.exe");
         if (wsl == null) {
@@ -42,14 +42,19 @@ public final class WslLinuxInstallerPackager extends InstallerPackager.Platform 
             throw new IllegalStateException("Failed to resolve valid WSL path for repo directory: " + repoDir);
         }
 
-        String gradleArgs = remoteLinuxPackageGradleArgs(version, buildDeb, displayAppName, linuxInstallDirName);
+        String gradleArgs = remoteLinuxPackageGradleArgs(version, displayAppName, linuxInstallDirName);
         String bashCommand = "set -euo pipefail; " +
                 "cd \"" + wslRepo + "\"; " +
-                "if ! command -v java >/dev/null 2>&1; then echo 'Missing Java in WSL distro. Install OpenJDK 17.' >&2; exit 1; fi; "
-                +
+                "if ! command -v java >/dev/null 2>&1; then echo 'Missing Java in WSL distro. Install OpenJDK 17.' >&2; exit 1; fi; " +
+                "if ! command -v flatpak >/dev/null 2>&1; then echo 'Missing flatpak in WSL distro.' >&2; exit 1; fi; " +
+                "if ! command -v flatpak-builder >/dev/null 2>&1; then echo 'Missing flatpak-builder in WSL distro.' >&2; exit 1; fi; " +
+                "if ! command -v fakeroot >/dev/null 2>&1; then echo 'Missing fakeroot in WSL distro.' >&2; exit 1; fi; " +
+                "flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo; " +
+                "flatpak --user install -y --noninteractive flathub org.gnome.Platform//50 org.gnome.Sdk//50; " +
                 "trap 'rm -f ./gradlew-wsl' EXIT; " +
                 "tr -d '\\r' < ./gradlew > ./gradlew-wsl; " +
                 "chmod +x ./gradlew-wsl; " +
+                "SKCRAFT_FLATPAK_BUILD_ROOT=/tmp/skcraft-flatpak-build " +
                 "GRADLE_USER_HOME=/tmp/skcraft-gradle ./gradlew-wsl --no-daemon --project-cache-dir /tmp/skcraft-project-cache "
                 + gradleArgs;
 

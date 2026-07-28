@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,6 +53,7 @@ public final class MacInstallerPackager extends InstallerPackager.Platform {
                 "--name", appName,
                 "--app-version", version,
                 "--vendor", "SKCraft",
+                "--description", APP_DESCRIPTION,
                 "--main-jar", "launcher-bootstrap.jar",
                 "--runtime-image", appImageDir.resolve(RUNTIME_DIR).toString(),
                 "--java-options", "-splash:$APPDIR/splash.png",
@@ -59,9 +61,9 @@ public final class MacInstallerPackager extends InstallerPackager.Platform {
                 "--mac-package-identifier", macPackageIdentifier,
                 "--mac-app-category", "games");
 
-        // DMG: bootstrap-only (no bundled launcher/natives — bootstrap downloads on
-        // first run)
+        // DMG: bootstrap jar only — no seed payload; first run downloads launcher.
         Path dmgInputDir = createDmgInput(appImageDir, "skcraft-mac-dmg-");
+        Path dmgResourceDir = prepareDmgResourceDir(projectDir, appName);
         try {
             List<String> dmgCommand = new ArrayList<>();
             dmgCommand.add("jpackage");
@@ -72,11 +74,15 @@ public final class MacInstallerPackager extends InstallerPackager.Platform {
             dmgCommand.add("--input");
             dmgCommand.add(dmgInputDir.toString());
             dmgCommand.addAll(commonJpackageArgs);
+            // Override default DMGsetup.scpt so Finder does not open the volume mid-build.
+            dmgCommand.add("--resource-dir");
+            dmgCommand.add(dmgResourceDir.toString());
             runCommand(dmgCommand, projectDir, Map.of());
             // jpackage names DMG as "{name}-{version}.dmg"; match Windows/Linux (no version).
             renamePackagedFile(outputDir, appName + "-" + version + ".dmg", installerFileName(appName, ".dmg"));
         } finally {
             deleteDirectory(dmgInputDir);
+            deleteDirectory(dmgResourceDir);
         }
 
         // PKG: includes bundled launcher jar + natives, seeded by postinstall
@@ -84,7 +90,9 @@ public final class MacInstallerPackager extends InstallerPackager.Platform {
         try {
             Path resourceDir = prepareJpackageResourceDir(projectDir, "macos", Map.of(
                     "@MAC_DATA_DIR@", macDataDir,
-                    "@MAC_APP_NAME@", appName));
+                    "@MAC_APP_NAME@", appName,
+                    "@LEGACY_MIGRATION@",
+                    prepareLegacyMigrationScript(projectDir, "legacyHomeFolderMac")));
 
             List<String> pkgCommand = new ArrayList<>();
             pkgCommand.add("jpackage");
@@ -103,16 +111,8 @@ public final class MacInstallerPackager extends InstallerPackager.Platform {
             deleteDirectory(pkgInputDir);
         }
 
-        Path macTarball = outputDir.resolve(installerFileName(appName, ".tar.gz"));
-        runCommand(List.of(
-                "tar",
-                "-C", appImageDir.toString(),
-                "-czf", macTarball.toString(),
-                "."), projectDir, Map.of());
-
         System.out.println("Built macOS DMG: " + outputDir.resolve(installerFileName(appName, ".dmg")));
         System.out.println("Built macOS PKG: " + outputDir.resolve(installerFileName(appName, ".pkg")));
-        System.out.println("Built macOS tarball: " + macTarball);
     }
 
     private String toMacPackageIdentifier(String appName) {
@@ -123,10 +123,34 @@ public final class MacInstallerPackager extends InstallerPackager.Platform {
         return "com.skcraft." + sanitized;
     }
 
+    /**
+     * DMG input is {@code app/} only. Seed lives under {@code bootstrap/} beside
+     * {@code app/} in the staged image and must never be copied into the DMG.
+     */
     private Path createDmgInput(Path appImageDir, String prefix) throws IOException {
         Path inputDir = Files.createTempDirectory(prefix);
         copyDirectory(appImageDir.resolve(APP_DIR), inputDir);
+        Path leakedSeed = inputDir.resolve(DATA_SUBDIR);
+        if (Files.exists(leakedSeed)) {
+            throw new IllegalStateException(
+                    "DMG input must not contain seed data, but found: " + leakedSeed);
+        }
         return inputDir;
+    }
+
+    /**
+     * jpackage looks up {@code <appName>-dmg-setup.scpt} in {@code --resource-dir}.
+     * Custom script keeps the Applications alias but skips Finder {@code open}.
+     */
+    private Path prepareDmgResourceDir(Path projectDir, String appName) throws IOException {
+        Path sourceScript = projectDir.resolve("installer/macos/jpackage-resources/dmg-setup.scpt");
+        ensureExists(sourceScript, "Missing DMG setup AppleScript");
+        Path targetDir = projectDir.resolve("build/tmp/jpackage-resources/macos-dmg");
+        deleteDirectory(targetDir);
+        Files.createDirectories(targetDir);
+        Path targetScript = targetDir.resolve(appName + "-dmg-setup.scpt");
+        Files.writeString(targetScript, Files.readString(sourceScript, StandardCharsets.UTF_8), StandardCharsets.UTF_8);
+        return targetDir;
     }
 
     private void createMacIcnsFromPng(Path iconPng, Path iconIcns, Path workingDir) throws Exception {

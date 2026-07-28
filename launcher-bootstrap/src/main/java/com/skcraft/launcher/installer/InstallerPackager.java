@@ -1,6 +1,5 @@
 package com.skcraft.launcher.installer;
 
-import com.skcraft.launcher.installer.platform.DockerLinuxInstallerPackager;
 import com.skcraft.launcher.installer.platform.LinuxInstallerPackager;
 import com.skcraft.launcher.installer.platform.MacInstallerPackager;
 import com.skcraft.launcher.installer.platform.WindowsInstallerPackager;
@@ -36,7 +35,7 @@ public final class InstallerPackager {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
-            throw new IllegalArgumentException("Usage: InstallerPackager <windows|linux|mac|wsl-linux|docker-linux> ...");
+            throw new IllegalArgumentException("Usage: InstallerPackager <windows|linux|mac|wsl-linux> ...");
         }
 
         String mode = args[0].toLowerCase(Locale.ROOT);
@@ -45,7 +44,6 @@ public final class InstallerPackager {
             case "linux" -> new LinuxInstallerPackager();
             case "mac" -> new MacInstallerPackager();
             case "wsl-linux" -> new WslLinuxInstallerPackager();
-            case "docker-linux" -> new DockerLinuxInstallerPackager();
             default -> throw new IllegalArgumentException("Unsupported mode: " + mode);
         };
         packager.run(Arrays.copyOfRange(args, 1, args.length));
@@ -56,6 +54,8 @@ public final class InstallerPackager {
         protected static final String RUNTIME_DIR = "runtime";
         protected static final String LAUNCHER_DIR = "launcher";
         protected static final String DATA_SUBDIR = "bootstrap";
+        protected static final String APP_DESCRIPTION =
+                "Install, update, and launch curated Minecraft modpacks.";
 
         protected Platform() {
         }
@@ -119,6 +119,23 @@ public final class InstallerPackager {
             return properties;
         }
 
+        protected String readLegacyHomeFolder(Path projectDir, String propertyKey) throws IOException {
+            return loadInstallerProperties(projectDir).getProperty(propertyKey, "").trim();
+        }
+
+        protected String prepareLegacyMigrationScript(Path projectDir, String propertyKey) throws IOException {
+            String legacyHomeFolder = readLegacyHomeFolder(projectDir, propertyKey);
+            if (legacyHomeFolder.isEmpty()) {
+                return "";
+            }
+
+            Path template = projectDir.resolve("installer/legacy-migration.sh");
+            ensureExists(template, "Missing legacy migration script");
+            return Files.readString(template, StandardCharsets.UTF_8)
+                    .replace("@LEGACY_HOME_FOLDER_SHELL@", shellSingleQuote(legacyHomeFolder))
+                    .stripTrailing();
+        }
+
         protected String getBootstrapPropertyWithFallback(Path projectDir, String key, String fallbackKey)
                 throws IOException {
             Path propertiesFile = projectDir.resolve("src/main/resources/com/skcraft/launcher/bootstrap.properties");
@@ -147,13 +164,12 @@ public final class InstallerPackager {
 
         /**
          * Nested Linux Gradle should reuse host-built jars/classes and only rebuild
-         * Linux-specific packaging (jlink runtime, AppImage, deb).
+         * Linux-specific packaging (jlink runtime, AppImage, Flatpak, and DEB).
          */
-        protected String remoteLinuxPackageGradleArgs(String version, boolean buildDeb, String displayAppName,
+        protected String remoteLinuxPackageGradleArgs(String version, String displayAppName,
                 String linuxInstallDirName) {
             return ":launcher-bootstrap:packageLinux"
                     + " -Pversion=" + shellSingleQuote(version)
-                    + " -PbuildDeb=" + shellSingleQuote(buildDeb ? "true" : "false")
                     + " -PappName=" + shellSingleQuote(displayAppName)
                     + " -PinstallDirName=" + shellSingleQuote(linuxInstallDirName)
                     + " -x :launcher:generateWebliteChecksums"
@@ -193,17 +209,6 @@ public final class InstallerPackager {
             ensureExists(from, "Expected packaged file missing");
             Files.deleteIfExists(to);
             Files.move(from, to);
-        }
-
-        protected boolean parseBooleanFlag(String raw) {
-            if (raw == null) {
-                return false;
-            }
-            String value = raw.trim().toLowerCase(Locale.ROOT);
-            return value.equals("1")
-                    || value.equals("true")
-                    || value.equals("yes")
-                    || value.equals("on");
         }
 
         protected String normalizePackageAppName(String appName) {

@@ -95,6 +95,8 @@ public class Bootstrap {
     }
 
     public void launch() throws Throwable {
+        BundledSeed.copyIfNeeded(Bootstrap.class, baseDir.toPath(), binariesDir.toPath());
+
         File[] files = binariesDir.listFiles(new LauncherBinary.Filter());
         List<LauncherBinary> binaries = new ArrayList<LauncherBinary>();
 

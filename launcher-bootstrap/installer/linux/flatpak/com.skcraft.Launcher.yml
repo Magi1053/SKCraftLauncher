@@ -1,0 +1,36 @@
+app-id: com.skcraft.Launcher
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: skcraft-launcher
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --env=WEBKIT_DISABLE_COMPOSITING_MODE=1
+modules:
+  - name: skcraft-launcher
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/skcraft-launcher
+      - cp -a . /app/lib/skcraft-launcher/
+      - install -Dm755 flatpak-launcher /app/bin/skcraft-launcher
+      - install -Dm644 com.skcraft.Launcher.desktop /app/share/applications/com.skcraft.Launcher.desktop
+      - install -Dm644 com.skcraft.Launcher.metainfo.xml /app/share/metainfo/com.skcraft.Launcher.metainfo.xml
+      - install -Dm644 com.skcraft.Launcher.png /app/share/icons/hicolor/512x512/apps/com.skcraft.Launcher.png
+    sources:
+      - type: dir
+        path: "@FLATPAK_APP_IMAGE_DIR@"
+      - type: file
+        path: flatpak-launcher
+      - type: file
+        path: com.skcraft.Launcher.desktop
+      - type: file
+        path: com.skcraft.Launcher.metainfo.xml
+      - type: file
+        path: "@FLATPAK_ICON@"
+        dest-filename: com.skcraft.Launcher.png

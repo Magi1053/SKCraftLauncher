@@ -1,0 +1,7 @@
+#!/bin/sh
+# WebKitGTK often paints blank under xrdp/X11 without this.
+export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"
+# AWT dialog ownership and positioning are unreliable on Wayland.
+export GDK_BACKEND=x11
+export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec /app/lib/skcraft-launcher/launcher-bootstrap "$@"

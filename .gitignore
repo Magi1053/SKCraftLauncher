@@ -117,6 +117,9 @@ pom.xml.next
 release.properties
 
 
+### Flatpak ###
+.flatpak-builder/
+
 ### Gradle ###
 .gradle
 build/

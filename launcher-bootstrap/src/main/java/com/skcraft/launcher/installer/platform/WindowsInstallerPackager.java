@@ -88,10 +88,6 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
         return appName.trim();
     }
 
-    private String readLegacyHomeFolder(Path projectDir, String propertyKey) throws IOException {
-        return loadInstallerProperties(projectDir).getProperty(propertyKey, "").trim();
-    }
-
     private void writeInstallerDefines(Path output, String legacyHomeFolder,
             String displayAppName, String installDirName, String installBaseDir, String setupFileName,
             String appImageDir,

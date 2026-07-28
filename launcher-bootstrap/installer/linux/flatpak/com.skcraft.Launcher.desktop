@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=@PACKAGE_APP_NAME@
+Comment=@APP_DESCRIPTION@
+Exec=skcraft-launcher
+Icon=com.skcraft.Launcher
+Terminal=false
+Categories=Game;
+StartupWMClass=com.skcraft.launcher.Bootstrap

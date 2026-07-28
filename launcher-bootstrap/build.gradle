@@ -88,7 +88,7 @@ tasks.register('packageWindows', JavaExec) {
 
 tasks.register('packageLinux', JavaExec) {
     group = 'distribution'
-    description = 'Build Linux AppImage, tar.gz, and optional DEB package via Java packager.'
+    description = 'Build Linux AppImage, Flatpak, and DEB package via Java packager.'
     dependsOn tasks.named('assembleAppImage')
 
     doFirst {
@@ -102,14 +102,13 @@ tasks.register('packageLinux', JavaExec) {
     args 'linux',
             projectDir.absolutePath,
             project.ext.installerVersion,
-            (findProperty('buildDeb') ?: 'false').toString(),
             project.ext.packageAppNameLinux,
             project.ext.installDirNameLinux.toLowerCase(Locale.ROOT)
 }
 
 tasks.register('packageLinuxWsl', JavaExec) {
     group = 'distribution'
-    description = 'Build Linux AppImage, tar.gz, and optional DEB from Windows via WSL using Java packager.'
+    description = 'Build Linux AppImage, Flatpak, and DEB from Windows via WSL using Java packager.'
     dependsOn tasks.named('shadowJar'), project(':launcher').tasks.named('shadowJar')
     mustRunAfter tasks.named('packageWindows')
 
@@ -124,32 +123,14 @@ tasks.register('packageLinuxWsl', JavaExec) {
     args 'wsl-linux',
             rootProject.projectDir.absolutePath,
             project.ext.installerVersion,
-            (findProperty('buildDeb') ?: 'false').toString(),
             project.ext.packageAppNameLinux,
             project.ext.installDirNameLinux.toLowerCase(Locale.ROOT),
             (findProperty('wslDistro') ?: '').toString()
 }
 
-tasks.register('packageLinuxDocker', JavaExec) {
-    group = 'distribution'
-    description = 'Build Linux AppImage, tar.gz, and optional DEB via Docker using Java packager.'
-    dependsOn tasks.named('shadowJar'), project(':launcher').tasks.named('shadowJar')
-    mustRunAfter tasks.named('packageWindows')
-
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
-    args 'docker-linux',
-            rootProject.projectDir.absolutePath,
-            project.ext.installerVersion,
-            (findProperty('buildDeb') ?: 'false').toString(),
-            project.ext.packageAppNameLinux,
-            project.ext.installDirNameLinux.toLowerCase(Locale.ROOT),
-            (findProperty('dockerImage') ?: '').toString()
-}
-
 tasks.register('packageMac', JavaExec) {
     group = 'distribution'
-    description = 'Build macOS DMG, PKG, and tarball via Java packager.'
+    description = 'Build macOS DMG and PKG via Java packager.'
     dependsOn tasks.named('assembleAppImage')
 
     doFirst {
