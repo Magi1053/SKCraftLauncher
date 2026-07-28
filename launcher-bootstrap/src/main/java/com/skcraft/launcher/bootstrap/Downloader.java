@@ -15,8 +15,6 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -41,10 +39,6 @@ public class Downloader implements Runnable, ProgressObservable {
     private HttpRequest httpRequest;
     private Thread thread;
     private List<LauncherBinary> binaries;
-
-    public Downloader(Bootstrap bootstrap) {
-        this(bootstrap, Collections.<LauncherBinary>emptyList());
-    }
 
     public Downloader(Bootstrap bootstrap, List<LauncherBinary> existingBinaries) {
         this(bootstrap, Mode.INITIAL, null, existingBinaries);
@@ -110,7 +104,7 @@ public class Downloader implements Runnable, ProgressObservable {
             finalFile.delete();
             tempFile.renameTo(finalFile);
 
-            writeLauncherVersionFile(finalFile);
+            BootstrapUtils.writeLauncherVersionFile(finalFile);
 
             LauncherBinary binary = new LauncherBinary(finalFile);
             binaries.add(binary);
@@ -138,7 +132,7 @@ public class Downloader implements Runnable, ProgressObservable {
             @Override
             public void run() {
                 Bootstrap.setSwingLookAndFeel();
-                dialog = new DownloadFrame(Downloader.this);
+                dialog = new DownloadFrame();
                 dialog.setVisible(true);
                 dialog.setDownloader(Downloader.this);
             }
@@ -167,11 +161,11 @@ public class Downloader implements Runnable, ProgressObservable {
             return updateUrl;
         }
 
-        URL latestUrl = HttpRequest.url(bootstrap.resolveSelfUpdateUrl());
-        log.info("Reading update URL " + latestUrl + "...");
+        URL selfUpdateUrl = HttpRequest.url(bootstrap.resolveSelfUpdateUrl());
+        log.info("Reading self-update URL " + selfUpdateUrl + "...");
 
         String data = HttpRequest
-                .get(latestUrl)
+                .get(selfUpdateUrl)
                 .execute()
                 .expectResponseCode(200)
                 .returnContent()
@@ -179,14 +173,14 @@ public class Downloader implements Runnable, ProgressObservable {
 
         Object object = JSONValue.parse(data);
         if (!(object instanceof JSONObject)) {
-            log.warning("Did not get valid update document - got:\n\n" + data);
-            throw new IOException("Update URL did not return a valid result");
+            log.warning("Did not get valid self-update document - got:\n\n" + data);
+            throw new IOException("Self-update URL did not return a valid result");
         }
 
         Object rawUrlValue = ((JSONObject) object).get("url");
         if (rawUrlValue == null) {
-            log.warning("Did not get valid update document - got:\n\n" + data);
-            throw new IOException("Update URL did not return a valid result");
+            log.warning("Did not get valid self-update document - got:\n\n" + data);
+            throw new IOException("Self-update URL did not return a valid result");
         }
 
         return HttpRequest.url(String.valueOf(rawUrlValue).trim());
@@ -246,9 +240,4 @@ public class Downloader implements Runnable, ProgressObservable {
         return httpRequest != null ? httpRequest.getProgress() : -1;
     }
 
-    private static void writeLauncherVersionFile(File launcherJar) throws IOException {
-        String version = JarVersionReader.readVersion(launcherJar);
-        File versionFile = new File(launcherJar.getParentFile(), "launcher.version");
-        Files.writeString(versionFile.toPath(), version.trim(), StandardCharsets.UTF_8);
-    }
 }

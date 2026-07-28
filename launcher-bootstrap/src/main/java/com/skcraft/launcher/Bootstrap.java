@@ -19,8 +19,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.logging.Level;
 
@@ -31,9 +29,12 @@ public class Bootstrap {
 
     private static final int BOOTSTRAP_VERSION = 1;
 
-    @Getter private final File baseDir;
-    @Getter private final File binariesDir;
-    @Getter private final Properties properties;
+    @Getter
+    private final File baseDir;
+    @Getter
+    private final File binariesDir;
+    @Getter
+    private final Properties properties;
     private final String[] originalArgs;
 
     public static void main(String[] args) throws Throwable {
@@ -160,11 +161,7 @@ public class Bootstrap {
         }
 
         try {
-            String version = JarVersionReader.readVersion(newest.getPath());
-            Files.writeString(
-                    new File(binariesDir, "launcher.version").toPath(),
-                    version.trim(),
-                    StandardCharsets.UTF_8);
+            BootstrapUtils.writeLauncherVersionFile(newest.getPath());
         } catch (Throwable t) {
             log.log(Level.WARNING, "Unable to write launcher.version sidecar.", t);
         }
@@ -262,11 +259,11 @@ public class Bootstrap {
             }
             Collections.sort(binaries);
 
-            for (int i = binaries.size() - 1; i >= 0; i--) {
+            for (LauncherBinary binary : binaries) {
                 try {
-                    return JarVersionReader.readSelfUpdateUrl(binaries.get(i).getPath());
+                    return JarVersionReader.readSelfUpdateUrl(binary.getPath());
                 } catch (IOException e) {
-                    log.log(Level.WARNING, "Unable to read self-update URL from " + binaries.get(i).getPath(), e);
+                    log.log(Level.WARNING, "Unable to read self-update URL from " + binary.getPath(), e);
                 }
             }
         }
@@ -283,7 +280,7 @@ public class Bootstrap {
         String expectedUrl = resolveSelfUpdateUrl();
         String actualUrl = JarVersionReader.readSelfUpdateUrl(jarFile);
         if (!Objects.equals(expectedUrl, actualUrl)) {
-            throw new Exception("Self Update URL is not equal to Latest URL");
+            throw new Exception("Self-update URL does not match expected self-update URL");
         }
 
         return clazz;

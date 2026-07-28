@@ -16,8 +16,8 @@ class FeaturePatternTable extends DefaultTable {
     public void setModel(TableModel dataModel) {
         super.setModel(dataModel);
         try {
-            getColumnModel().getColumn(1).setMaxWidth(80);
             getColumnModel().getColumn(2).setMaxWidth(80);
+            getColumnModel().getColumn(3).setMaxWidth(80);
         } catch (ArrayIndexOutOfBoundsException ignored) {
         }
     }

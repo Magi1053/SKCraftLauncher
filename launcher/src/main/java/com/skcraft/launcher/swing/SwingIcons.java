@@ -48,6 +48,27 @@ public final class SwingIcons {
 		});
 	}
 
+	public static Icon plus(int size) {
+		return paint(size, g -> {
+			g.setColor(SwingHelper.uiColor("Button.foreground", new Color(55, 55, 55)));
+			g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+			int c = size / 2;
+			int pad = size / 5;
+			g.drawLine(pad, c, size - pad, c);
+			g.drawLine(c, pad, c, size - pad);
+		});
+	}
+
+	public static Icon forget(int size, Color color) {
+		return paint(size, g -> {
+			g.setColor(color);
+			g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+			int pad = size / 5;
+			g.drawLine(pad, pad, size - pad, size - pad);
+			g.drawLine(size - pad, pad, pad, size - pad);
+		});
+	}
+
 	public static Icon paint(int size, Consumer<Graphics2D> painter) {
 		return new Icon() {
 			@Override

@@ -28,10 +28,6 @@ public class TestLauncher implements Function<InstanceList, Instance>, ProgressO
     private final Session session;
     private final boolean reselectFeatures;
 
-    public TestLauncher(Launcher launcher, Window window, String id, Session session) {
-        this(launcher, window, id, session, false);
-    }
-
     public TestLauncher(Launcher launcher, Window window, String id, Session session, boolean reselectFeatures) {
         this.launcher = launcher;
         this.window = window;

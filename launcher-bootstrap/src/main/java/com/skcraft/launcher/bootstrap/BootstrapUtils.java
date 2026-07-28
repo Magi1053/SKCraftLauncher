@@ -14,15 +14,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Locale;
 import java.util.Properties;
-import java.util.regex.Pattern;
 
 public final class BootstrapUtils {
 
     public static final String DATA_SUBDIR = "bootstrap";
-
-    private static final Pattern absoluteUrlPattern = Pattern.compile("^[A-Za-z0-9\\-]+://.*$");
 
     private BootstrapUtils() {
     }
@@ -105,15 +104,25 @@ public final class BootstrapUtils {
         return PlatformSupport.INSTANCE.resolveDataDir(properties, clazz);
     }
 
-    private static File resolveSidecarPropertiesFile(Class<?> clazz, String name) {
-        File baseDir = resolveCodeSourceBaseDir(clazz);
-        if (baseDir == null) {
+    /**
+     * Path to the code-source JAR or directory for {@code clazz}, or null if unknown.
+     */
+    public static File resolveCodeSourcePath(Class<?> clazz) {
+        try {
+            URL location = clazz.getProtectionDomain().getCodeSource().getLocation();
+            if (location == null) {
+                return null;
+            }
+            return new File(location.toURI());
+        } catch (Exception ignored) {
             return null;
         }
-        return new File(baseDir, name);
     }
 
-    private static File resolveCodeSourceBaseDir(Class<?> clazz) {
+    /**
+     * Directory containing the code-source for {@code clazz} (parent of a JAR).
+     */
+    public static File resolveCodeSourceBaseDir(Class<?> clazz) {
         File path = resolveCodeSourcePath(clazz);
         if (path == null) {
             return null;
@@ -127,16 +136,21 @@ public final class BootstrapUtils {
         return baseDir;
     }
 
-    private static File resolveCodeSourcePath(Class<?> clazz) {
-        try {
-            URL location = clazz.getProtectionDomain().getCodeSource().getLocation();
-            if (location == null) {
-                return null;
-            }
-            return new File(location.toURI());
-        } catch (Exception ignored) {
+    /**
+     * Write {@code launcher.version} beside the given launcher JAR.
+     */
+    public static void writeLauncherVersionFile(File launcherJar) throws IOException {
+        String version = JarVersionReader.readVersion(launcherJar);
+        File versionFile = new File(launcherJar.getParentFile(), "launcher.version");
+        Files.writeString(versionFile.toPath(), version.trim(), StandardCharsets.UTF_8);
+    }
+
+    private static File resolveSidecarPropertiesFile(Class<?> clazz, String name) {
+        File baseDir = resolveCodeSourceBaseDir(clazz);
+        if (baseDir == null) {
             return null;
         }
+        return new File(baseDir, name);
     }
 
 }

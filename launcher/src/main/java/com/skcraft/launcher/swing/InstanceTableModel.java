@@ -40,6 +40,7 @@ public class InstanceTableModel extends AbstractTableModel {
 
     public void update() {
         instances.sort();
+        iconCache.clearFailed();
         fireTableDataChanged();
     }
 

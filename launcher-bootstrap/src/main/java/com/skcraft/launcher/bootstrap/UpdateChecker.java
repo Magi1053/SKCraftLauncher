@@ -29,8 +29,8 @@ public class UpdateChecker {
     public UpdateInfo checkForUpdate(String currentVersion) {
         try {
             String encodedVersion = URLEncoder.encode(currentVersion, "UTF-8");
-            String latestUrl = bootstrap.resolveSelfUpdateUrl();
-            URL url = HttpRequest.url(latestUrl + "?version=" + encodedVersion);
+            String selfUpdateUrl = bootstrap.resolveSelfUpdateUrl();
+            URL url = HttpRequest.url(selfUpdateUrl + "?version=" + encodedVersion);
 
             String data = HttpRequest.get(url)
                     .timeout(CHECK_TIMEOUT_MS)
@@ -41,7 +41,7 @@ public class UpdateChecker {
 
             Object object = JSONValue.parse(data);
             if (!(object instanceof JSONObject)) {
-                log.warning("Invalid latest.json payload, expected object.");
+                log.warning("Invalid self-update payload, expected object.");
                 return null;
             }
 
@@ -50,7 +50,7 @@ public class UpdateChecker {
             String rawUrl = readString(json, "url");
 
             if (latestVersion == null || rawUrl == null) {
-                log.warning("latest.json is missing required 'version' or 'url' fields.");
+                log.warning("Self-update payload is missing required 'version' or 'url' fields.");
                 return null;
             }
 

@@ -34,7 +34,7 @@ public enum ListingType {
             return Persistence.writeValueAsString(list, Persistence.L2F_LIST_PRETTY_PRINTER);
         }
     },
-    PHP("packages.php (requires PHP on web server) ", true, "packages.php") {
+    PHP("packages.php (requires PHP on web server)", true, "packages.php") {
         @Override
         public String generate(List<ManifestEntry> entries) throws IOException {
             StringBuilder builder = new StringBuilder();

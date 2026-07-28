@@ -321,7 +321,7 @@ public class LaunchSupervisor {
 
         ProgressDialog.showProgress(
                 window, readyFuture, launchProgress,
-                SharedLocale.tr("launcher.launchingTItle"),
+                SharedLocale.tr("launcher.launchingTitle"),
                 tr("launcher.launchingStatus", instance.getTitle()));
     }
 

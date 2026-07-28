@@ -9,9 +9,6 @@ package com.skcraft.launcher.bootstrap;
 import lombok.Getter;
 import lombok.extern.java.Log;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -464,24 +461,6 @@ public class HttpRequest implements Closeable, ProgressObservable {
          */
         public String asString(String encoding) throws IOException {
             return new String(data, encoding);
-        }
-
-        /**
-         * Return the result as an instance of the given class that has been
-         * deserialized from a XML payload.
-         *
-         * @return the object
-         * @throws java.io.IOException on I/O error
-         */
-        @SuppressWarnings("unchecked")
-        public <T> T asXml(Class<T> cls) throws IOException {
-            try {
-                JAXBContext context = JAXBContext.newInstance(cls);
-                Unmarshaller um = context.createUnmarshaller();
-                return (T) um.unmarshal(new ByteArrayInputStream(data));
-            } catch (JAXBException e) {
-                throw new IOException(e);
-            }
         }
 
         /**

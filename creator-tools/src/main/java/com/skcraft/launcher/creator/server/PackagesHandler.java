@@ -48,6 +48,7 @@ class PackagesHandler extends AbstractHandler {
 
         List<ManifestInfo> packages = Lists.newArrayList();
         PackageList packageList = new PackageList();
+        packageList.setMinimumVersion(PackageList.MIN_VERSION);
         packageList.setPackages(packages);
 
         List<ManifestEntry> listingEntries = listingEntriesSupplier.get();
@@ -67,7 +68,7 @@ class PackagesHandler extends AbstractHandler {
 
                 for (ManifestEntry entry : listingEntries) {
                     ManifestInfo listed = entry.getManifestInfo();
-                    if (listed != null && file.getName().equals(listed.getLocation())) {
+                    if (listed != null && matchesListingEntry(file, manifest, listed)) {
                         info.setPriority(listed.getPriority());
                         info.setNewsUrl(listed.getNewsUrl());
                         info.setIconUrl(listed.getIconUrl());
@@ -81,6 +82,19 @@ class PackagesHandler extends AbstractHandler {
 
         mapper.writeValue(response.getWriter(), packageList);
         baseRequest.setHandled(true);
+    }
+
+    /**
+     * Match listing metadata to a TestServer package file. Listing locations often
+     * use production names while Test builds serve {@code staging.json}, so also
+     * match by manifest name.
+     */
+    private static boolean matchesListingEntry(File file, Manifest manifest, ManifestInfo listed) {
+        if (file.getName().equals(listed.getLocation())) {
+            return true;
+        }
+        String packName = manifest.getName();
+        return packName != null && packName.equalsIgnoreCase(listed.getName());
     }
 
     private static class PackageFileFilter implements FileFilter {

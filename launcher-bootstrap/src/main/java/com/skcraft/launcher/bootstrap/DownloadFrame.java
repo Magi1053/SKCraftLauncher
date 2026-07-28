@@ -7,7 +7,6 @@
 package com.skcraft.launcher.bootstrap;
 
 import com.skcraft.launcher.Bootstrap;
-import lombok.extern.java.Log;
 
 import javax.swing.*;
 import java.awt.*;
@@ -20,7 +19,6 @@ import java.util.TimerTask;
 
 import static com.skcraft.launcher.bootstrap.SharedLocale.tr;
 
-@Log
 public class DownloadFrame extends JFrame {
 
     private Downloader downloader;
@@ -28,12 +26,11 @@ public class DownloadFrame extends JFrame {
 
     private final JLabel label = new JLabel();
     private final JPanel progressPanel = new JPanel(new BorderLayout(0, 5));
-    private final JPanel textAreaPanel = new JPanel(new BorderLayout());
     private final JProgressBar progressBar = new JProgressBar();
     private final LinedBoxPanel buttonsPanel = new LinedBoxPanel(true);
-    private final JButton cancelButton = new JButton(tr("button.cancal"));
+    private final JButton cancelButton = new JButton(tr("button.cancel"));
 
-    public DownloadFrame(ProgressObservable observable) {
+    public DownloadFrame() {
         super(tr("downloader.title"));
         setResizable(false);
         initComponents();
@@ -58,7 +55,7 @@ public class DownloadFrame extends JFrame {
     private void initComponents() {
         buttonsPanel.addGlue();
         buttonsPanel.addElement(cancelButton);
-        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(30, 13, 13, 13));;
+        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(30, 13, 13, 13));
 
         progressBar.setIndeterminate(true);
         progressBar.setMinimum(0);
@@ -68,13 +65,10 @@ public class DownloadFrame extends JFrame {
         progressPanel.add(label, BorderLayout.NORTH);
         progressPanel.setBorder(BorderFactory.createEmptyBorder(13, 13, 0, 13));
         progressPanel.add(progressBar, BorderLayout.CENTER);
-        textAreaPanel.setBorder(BorderFactory.createEmptyBorder(10, 13, 0, 13));
 
         add(progressPanel, BorderLayout.NORTH);
-        add(textAreaPanel, BorderLayout.CENTER);
         add(buttonsPanel, BorderLayout.SOUTH);
 
-        textAreaPanel.setVisible(false);
         cancelButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -110,18 +104,12 @@ public class DownloadFrame extends JFrame {
         } else {
             if (timer == null) {
                 timer = new Timer();
-                timer.scheduleAtFixedRate(new UpdateProgress( downloader), 500, 500);
+                timer.scheduleAtFixedRate(new UpdateProgress(), 500, 500);
             }
         }
     }
 
     private class UpdateProgress extends TimerTask {
-        private final Downloader downloader;
-
-        public UpdateProgress(Downloader downloader) {
-            this.downloader = downloader;
-        }
-
         @Override
         public void run() {
             SwingUtilities.invokeLater(new Runnable() {

@@ -10,7 +10,6 @@ import com.skcraft.launcher.bootstrap.BootstrapUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
 import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -68,7 +67,7 @@ final class WindowsPlatformSupport extends PlatformSupport.Adapter {
     }
 
     private static File resolveInstallDir(Class<?> anchor) {
-        File codeSourcePath = resolveCodeSourcePath(anchor);
+        File codeSourcePath = BootstrapUtils.resolveCodeSourcePath(anchor);
         if (codeSourcePath == null || !codeSourcePath.isFile() || !codeSourcePath.getName().endsWith(".jar")) {
             return null;
         }
@@ -138,12 +137,4 @@ final class WindowsPlatformSupport extends PlatformSupport.Adapter {
         return null;
     }
 
-    private static File resolveCodeSourcePath(Class<?> anchor) {
-        try {
-            URL location = anchor.getProtectionDomain().getCodeSource().getLocation();
-            return location == null ? null : new File(location.toURI());
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
 }

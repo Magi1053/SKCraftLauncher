@@ -59,7 +59,7 @@ public class MicrosoftLoginDialog extends JDialog {
 	private final String verificationUri;
 
 	private final JButton copyCodeButton = createCopyIconButton();
-	private final JButton fallbackButton = new JButton(tr("login.microsoft.device.useBrowserFallback"));
+	private final JButton browserSignInButton = new JButton(tr("login.microsoft.device.useBrowser"));
 	private final JButton cancelButton = new JButton(tr("button.cancel"));
 	private final JTextField codeField;
 	private final JLabel statusLabel = new JLabel(tr("login.microsoft.device.awaiting"));
@@ -67,7 +67,7 @@ public class MicrosoftLoginDialog extends JDialog {
 	private final JLabel qrLabel = new JLabel();
 	private final QrSpinnerPanel qrSpinnerPanel = new QrSpinnerPanel(QR_SIZE);
 	private final JPanel qrContentPanel = new JPanel(new CardLayout());
-	private JPanel qrColumn;
+	private final JPanel qrColumn = new JPanel(new MigLayout("insets 0", "[" + QR_SIZE + "!]", "[" + QR_SIZE + "!]"));
 	private final JProgressBar pollIndicator = new JProgressBar();
 
 	private final Timer countdownTimer;
@@ -133,10 +133,10 @@ public class MicrosoftLoginDialog extends JDialog {
 		content.add(titleLabel, "gapbottom 2");
 		content.add(subtitleLabel, "gapbottom 16");
 
-		fallbackButton.setFont(fallbackButton.getFont().deriveFont(Font.BOLD, fallbackButton.getFont().getSize2D() + 1f));
-		fallbackButton.setMargin(new Insets(12, 18, 12, 18));
-		fallbackButton.putClientProperty("FlatLaf.styleClass", "primary");
-		content.add(fallbackButton, "growx, hmin 44, gapbottom 16");
+		browserSignInButton.setFont(browserSignInButton.getFont().deriveFont(Font.BOLD, browserSignInButton.getFont().getSize2D() + 1f));
+		browserSignInButton.setMargin(new Insets(12, 18, 12, 18));
+		browserSignInButton.putClientProperty("FlatLaf.styleClass", "primary");
+		content.add(browserSignInButton, "growx, hmin 44, gapbottom 16");
 
 		content.add(buildOrDivider(tr("login.microsoft.device.deviceHint")), "growx, gapbottom 16");
 		content.add(buildDeviceCodePanel(), "alignx center, gapbottom 14");
@@ -160,14 +160,14 @@ public class MicrosoftLoginDialog extends JDialog {
 		add(buttonBar, BorderLayout.SOUTH);
 
 		SwingHelper.styleDialogButton(copyCodeButton);
-		SwingHelper.styleDialogButton(fallbackButton);
+		SwingHelper.styleDialogButton(browserSignInButton);
 		SwingHelper.styleDialogButton(cancelButton);
 
 		copyCodeButton.addActionListener(ev -> handleCopy());
-		fallbackButton.addActionListener(ev -> handleFallback());
+		browserSignInButton.addActionListener(ev -> handleBrowserSignIn());
 		cancelButton.addActionListener(ev -> handleCancel());
 
-		getRootPane().setDefaultButton(fallbackButton);
+		getRootPane().setDefaultButton(browserSignInButton);
 		getRootPane().registerKeyboardAction(ev -> handleCancel(),
 				KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
 				JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -243,7 +243,6 @@ public class MicrosoftLoginDialog extends JDialog {
 		qrContentPanel.add(qrSpinnerPanel, "spinner");
 		qrContentPanel.add(qrLabel, "qr");
 
-		qrColumn = new JPanel(new MigLayout("insets 0", "[" + QR_SIZE + "!]", "[" + QR_SIZE + "!]"));
 		qrColumn.add(qrContentPanel, "w " + QR_SIZE + "!, h " + QR_SIZE + "!");
 		qrColumn.setVisible(authUrl != null && !authUrl.isEmpty());
 
@@ -360,8 +359,8 @@ public class MicrosoftLoginDialog extends JDialog {
 		copyResetTimer.start();
 	}
 
-	private void handleFallback() {
-		outcome = Outcome.fallback();
+	private void handleBrowserSignIn() {
+		outcome = Outcome.browser();
 		closeDialog();
 	}
 
@@ -372,9 +371,7 @@ public class MicrosoftLoginDialog extends JDialog {
 
 	private void hideQrOption() {
 		qrSpinnerPanel.stop();
-		if (qrColumn != null) {
-			qrColumn.setVisible(false);
-		}
+		qrColumn.setVisible(false);
 		pack();
 	}
 
@@ -503,7 +500,7 @@ public class MicrosoftLoginDialog extends JDialog {
 	public enum Result {
 		SUCCESS,
 		CANCELLED,
-		FALLBACK_REQUESTED
+		BROWSER_REQUESTED
 	}
 
 	@RequiredArgsConstructor
@@ -520,8 +517,8 @@ public class MicrosoftLoginDialog extends JDialog {
 			return new Outcome(Result.CANCELLED, null);
 		}
 
-		public static Outcome fallback() {
-			return new Outcome(Result.FALLBACK_REQUESTED, null);
+		public static Outcome browser() {
+			return new Outcome(Result.BROWSER_REQUESTED, null);
 		}
 	}
 }

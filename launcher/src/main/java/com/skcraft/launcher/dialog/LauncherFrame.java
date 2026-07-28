@@ -264,18 +264,12 @@ public class LauncherFrame extends JFrame {
             public void updateUI() {
                 super.updateUI();
                 if (label.getParent() == this) {
-                    Color muted = UIManager.getColor("Label.disabledForeground");
-                    if (muted != null) {
-                        label.setForeground(muted);
-                    }
+                    label.setForeground(SwingHelper.uiColor("Label.disabledForeground", Color.GRAY));
                 }
             }
         };
         panel.add(label);
-        Color muted = UIManager.getColor("Label.disabledForeground");
-        if (muted != null) {
-            label.setForeground(muted);
-        }
+        label.setForeground(SwingHelper.uiColor("Label.disabledForeground", Color.GRAY));
         return panel;
     }
 

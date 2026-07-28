@@ -50,6 +50,13 @@ public class InstanceIconCache {
     }
 
     /**
+     * Allow previously failed URLs to be fetched again (e.g. on instance list refresh).
+     */
+    public void clearFailed() {
+        failed.clear();
+    }
+
+    /**
      * Return a scaled icon for the URL if available; otherwise kick off a fetch and return null.
      */
     public Icon get(String iconUrl) {

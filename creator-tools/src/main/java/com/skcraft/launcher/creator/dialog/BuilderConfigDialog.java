@@ -90,6 +90,7 @@ public class BuilderConfigDialog extends JDialog {
         titleText.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         launchFlagsArea.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
         userFilesIncludeArea.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
+        userFilesExcludeArea.setComponentPopupMenu(TextFieldPopupMenu.INSTANCE);
 
         gameVersionBox.setEditable(true);
         gameVersionBox.setRenderer(new GameVersionRenderer());
@@ -669,7 +670,7 @@ public class BuilderConfigDialog extends JDialog {
 
     private static List<RuntimeChoice> fetchRuntimeChoices() throws IOException, InterruptedException {
         Properties creatorProperties = LauncherUtils.loadProperties(
-                Creator.class, "creator.properties", "com.skcraft.launcher.creator.propertiesFile");
+                Creator.class, "creator.properties", "com.skcraft.creator.propertiesFile");
         String runtimeManifestUrl = Strings.emptyToNull(creatorProperties.getProperty("runtimeManifestUrl"));
         if (runtimeManifestUrl == null) {
             Properties launcherProperties = LauncherUtils.loadProperties(

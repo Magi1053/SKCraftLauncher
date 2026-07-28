@@ -7,11 +7,12 @@
 package com.skcraft.launcher.swing;
 
 import javax.swing.UIManager;
+import java.awt.Color;
 import java.awt.Font;
 
 /**
- * Shared metrics for instance table rows and the account switcher content row.
- * Keep these in sync so the two UIs cannot drift.
+ * Shared metrics for instance table rows, account switcher, and account list rows.
+ * Keep these in sync so the UIs cannot drift.
  */
 public final class InstanceRowStyle {
 
@@ -23,11 +24,7 @@ public final class InstanceRowStyle {
     public static final float TITLE_FONT_SIZE = 14.0f;
     /** Subtitle font size. */
     public static final float SUBTITLE_FONT_SIZE = 11.0f;
-    /**
-     * Outer EmptyBorder vertical inset on the row root.
-     * Kept at 0 so icon+text use the full {@link #ROW_HEIGHT}; a 32px icon is still
-     * optically centered with the same 8px air as the old 3+5 inset split.
-     */
+    /** Outer EmptyBorder vertical inset on the row root. */
     public static final int VERTICAL_INSET = 0;
     /** Outer EmptyBorder horizontal inset on the row root. */
     public static final int SIDE_INSET = 2;
@@ -57,5 +54,22 @@ public final class InstanceRowStyle {
             return label.deriveFont(TITLE_FONT_SIZE);
         }
         return new Font(Font.DIALOG, Font.PLAIN, Math.round(TITLE_FONT_SIZE));
+    }
+
+    /**
+     * Semi-transparent hover fill from table/list selection colors.
+     */
+    public static Color hoverBackground() {
+        Color hover = UIManager.getColor("Table.selectionBackground");
+        if (hover == null) {
+            hover = UIManager.getColor("List.selectionBackground");
+        }
+        if (hover == null) {
+            hover = UIManager.getColor("Component.accentColor");
+        }
+        if (hover == null) {
+            hover = Color.GRAY;
+        }
+        return new Color(hover.getRed(), hover.getGreen(), hover.getBlue(), HOVER_ALPHA);
     }
 }

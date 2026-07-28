@@ -61,10 +61,7 @@ public class InstanceTableCellRenderer extends JPanel implements TableCellRender
         titleLabel.setText(instance.getTitle());
         subtitleLabel.setText(InstanceStatusText.forInstance(instance));
 
-        Color mutedForeground = UIManager.getColor("Label.disabledForeground");
-        if (mutedForeground == null) {
-            mutedForeground = table.getForeground();
-        }
+        Color mutedForeground = SwingHelper.uiColor("Label.disabledForeground", table.getForeground());
 
         if (isSelected) {
             Color activeSelectionBackground = UIManager.getColor("Table.selectionBackground");
@@ -75,7 +72,7 @@ public class InstanceTableCellRenderer extends JPanel implements TableCellRender
             titleLabel.setForeground(selectionForeground);
             subtitleLabel.setForeground(selectionForeground);
         } else if (isRolloverRow(table, row)) {
-            setBackground(getHoverBackground(table));
+            setBackground(InstanceRowStyle.hoverBackground());
             titleLabel.setForeground(table.getForeground());
             subtitleLabel.setForeground(mutedForeground);
         } else {
@@ -110,14 +107,6 @@ public class InstanceTableCellRenderer extends JPanel implements TableCellRender
     private static boolean isRolloverRow(JTable table, int row) {
         Object rolloverRow = table.getClientProperty("launcher.rolloverRow");
         return rolloverRow instanceof Integer && ((Integer) rolloverRow).intValue() == row;
-    }
-
-    private static Color getHoverBackground(JTable table) {
-        Color hover = UIManager.getColor("Table.selectionBackground");
-        if (hover == null) {
-            hover = table.getSelectionBackground();
-        }
-        return new Color(hover.getRed(), hover.getGreen(), hover.getBlue(), InstanceRowStyle.HOVER_ALPHA);
     }
 
 }

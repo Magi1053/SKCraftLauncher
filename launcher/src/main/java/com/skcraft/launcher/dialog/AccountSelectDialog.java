@@ -13,6 +13,7 @@ import com.skcraft.launcher.persistence.Persistence;
 import com.skcraft.launcher.swing.InstanceRowStyle;
 import com.skcraft.launcher.swing.LinedBoxPanel;
 import com.skcraft.launcher.swing.SwingHelper;
+import com.skcraft.launcher.swing.SwingIcons;
 import com.skcraft.launcher.util.SharedLocale;
 import com.skcraft.launcher.util.SwingExecutor;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -35,7 +35,6 @@ import java.util.concurrent.Executor;
 
 public class AccountSelectDialog extends JDialog {
 	private static final int ACTION_ICON_SIZE = 14;
-	private static final int TITLE_SUBTITLE_GAP = 0;
 	private static final int VISIBLE_ACCOUNT_ROWS = 3;
 	private static final String OFFLINE_USERNAME_PATTERN = "[A-Za-z0-9_]{3,16}";
 
@@ -43,7 +42,7 @@ public class AccountSelectDialog extends JDialog {
 	private final JButton loginButton;
 	private final JButton cancelButton = new JButton(SharedLocale.tr("button.cancel"));
 	private final JButton addAccountButton = createAddAccountButton();
-	private final JButton removeSelected = createForgetAccountButton();
+	private final JButton forgetAccountButton = createForgetAccountButton();
 	private final JButton offlineButton = createOfflineAccountButton();
 	private final LinedBoxPanel buttonsPanel = new LinedBoxPanel(true);
 
@@ -79,7 +78,7 @@ public class AccountSelectDialog extends JDialog {
 		accountList.setLayoutOrientation(JList.VERTICAL);
 		accountList.setVisibleRowCount(VISIBLE_ACCOUNT_ROWS);
 		accountList.setCellRenderer(new AccountRenderer());
-		accountList.setFixedCellHeight(46);
+		accountList.setFixedCellHeight(InstanceRowStyle.ROW_HEIGHT);
 		accountList.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 		accountList.addMouseListener(new MouseAdapter() {
 			@Override
@@ -123,20 +122,20 @@ public class AccountSelectDialog extends JDialog {
 
 		Insets actionInsets = new Insets(10, 12, 10, 12);
 		addAccountButton.setMargin(actionInsets);
-		removeSelected.setMargin(actionInsets);
+		forgetAccountButton.setMargin(actionInsets);
 		SwingHelper.styleDialogButton(addAccountButton);
-		SwingHelper.styleDialogButton(removeSelected);
-		SwingHelper.alignButtonSizes(addAccountButton, removeSelected);
+		SwingHelper.styleDialogButton(forgetAccountButton);
+		SwingHelper.alignButtonSizes(addAccountButton, forgetAccountButton);
 		Dimension actionSize = addAccountButton.getPreferredSize();
 		actionSize.height = Math.max(actionSize.height, 38);
 		addAccountButton.setPreferredSize(actionSize);
 		addAccountButton.setMinimumSize(actionSize);
-		removeSelected.setPreferredSize(actionSize);
-		removeSelected.setMinimumSize(actionSize);
+		forgetAccountButton.setPreferredSize(actionSize);
+		forgetAccountButton.setMinimumSize(actionSize);
 
 		actionsPanel.add(actionsLabel, "gapbottom 8");
 		actionsPanel.add(addAccountButton, "growx");
-		actionsPanel.add(removeSelected, "growx, gaptop 6");
+		actionsPanel.add(forgetAccountButton, "growx, gaptop 6");
 
 		JPanel contentPanel = new JPanel(new BorderLayout(12, 0));
 		contentPanel.add(accountPane, BorderLayout.CENTER);
@@ -157,7 +156,7 @@ public class AccountSelectDialog extends JDialog {
 
 		offlineButton.addActionListener(ev -> beginOfflineAccount());
 
-		removeSelected.addActionListener(ev -> {
+		forgetAccountButton.addActionListener(ev -> {
 			if (accountList.getSelectedValue() != null) {
 				boolean confirmed = SwingHelper.confirmDialog(this, SharedLocale.tr("accounts.confirmForget"),
 						SharedLocale.tr("accounts.confirmForgetTitle"));
@@ -211,7 +210,7 @@ public class AccountSelectDialog extends JDialog {
 		headerPanel.add(titleLabel, constraints);
 		constraints = (GridBagConstraints) constraints.clone();
 		constraints.gridy = 1;
-		constraints.insets = new Insets(TITLE_SUBTITLE_GAP, 0, 0, 0);
+		constraints.insets = new Insets(InstanceRowStyle.TITLE_SUBTITLE_GAP, 0, 0, 0);
 		headerPanel.add(subtitleLabel, constraints);
 		return headerPanel;
 	}
@@ -220,13 +219,12 @@ public class AccountSelectDialog extends JDialog {
 		boolean hasSelection = accountList.getSelectedValue() != null;
 		loginButton.setEnabled(hasSelection);
 		SwingHelper.updateDialogButtonCursor(loginButton);
-		removeSelected.setEnabled(hasSelection);
-		removeSelected.setIcon(createForgetIcon(ACTION_ICON_SIZE, hasSelection));
-		updateForgetButtonStyle(removeSelected, hasSelection);
+		forgetAccountButton.setEnabled(hasSelection);
+		updateForgetButtonStyle(forgetAccountButton, hasSelection);
 	}
 
 	private static JButton createAddAccountButton() {
-		JButton button = new JButton(SharedLocale.tr("accounts.addAccount"), createPlusIcon(ACTION_ICON_SIZE));
+		JButton button = new JButton(SharedLocale.tr("accounts.addAccount"), SwingIcons.plus(ACTION_ICON_SIZE));
 		button.setToolTipText(SharedLocale.tr("accounts.addAccountTooltip"));
 		button.setIconTextGap(8);
 		button.setFont(button.getFont().deriveFont(Font.BOLD));
@@ -240,8 +238,8 @@ public class AccountSelectDialog extends JDialog {
 	}
 
 	private static JButton createForgetAccountButton() {
-		JButton button = new JButton(SharedLocale.tr("accounts.removeSelected"),
-				createForgetIcon(ACTION_ICON_SIZE, false));
+		JButton button = new JButton(SharedLocale.tr("accounts.forgetAccount"),
+				SwingIcons.forget(ACTION_ICON_SIZE, getForgetButtonForeground(false)));
 		button.setToolTipText(SharedLocale.tr("accounts.forgetTooltip"));
 		button.setIconTextGap(8);
 		return button;
@@ -251,45 +249,8 @@ public class AccountSelectDialog extends JDialog {
 		SwingHelper.updateDialogButtonCursor(button);
 		Color foreground = getForgetButtonForeground(enabled);
 		button.setForeground(foreground);
-		button.setIcon(createForgetIcon(ACTION_ICON_SIZE, foreground));
-		button.setDisabledIcon(createForgetIcon(ACTION_ICON_SIZE, getForgetButtonForeground(false)));
-	}
-
-	private static Icon createPlusIcon(int size) {
-		BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = image.createGraphics();
-		try {
-			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-			g.setColor(SwingHelper.uiColor("Button.foreground", new Color(55, 55, 55)));
-			g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-			int c = size / 2;
-			int pad = size / 5;
-			g.drawLine(pad, c, size - pad, c);
-			g.drawLine(c, pad, c, size - pad);
-		} finally {
-			g.dispose();
-		}
-		return new ImageIcon(image);
-	}
-
-	private static Icon createForgetIcon(int size, boolean enabled) {
-		return createForgetIcon(size, getForgetButtonForeground(enabled));
-	}
-
-	private static Icon createForgetIcon(int size, Color color) {
-		BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = image.createGraphics();
-		try {
-			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-			g.setColor(color);
-			g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-			int pad = size / 5;
-			g.drawLine(pad, pad, size - pad, size - pad);
-			g.drawLine(size - pad, pad, pad, size - pad);
-		} finally {
-			g.dispose();
-		}
-		return new ImageIcon(image);
+		button.setIcon(SwingIcons.forget(ACTION_ICON_SIZE, foreground));
+		button.setDisabledIcon(SwingIcons.forget(ACTION_ICON_SIZE, getForgetButtonForeground(false)));
 	}
 
 	private static Color getForgetButtonForeground(boolean enabled) {
@@ -491,7 +452,7 @@ public class AccountSelectDialog extends JDialog {
 		switch (outcome.getResult()) {
 			case SUCCESS:
 				return outcome.getSession();
-			case FALLBACK_REQUESTED:
+			case BROWSER_REQUESTED:
 				return attemptMicrosoftBrowserLogin(owner, launcher);
 			case CANCELLED:
 			default:
@@ -659,36 +620,36 @@ public class AccountSelectDialog extends JDialog {
 	}
 
 	private static class AccountRenderer extends JPanel implements ListCellRenderer<SavedSession> {
-		private static final int AVATAR_SIZE = 32;
-		private static final int ICON_TEXT_GAP = 10;
-		private static final float SUBTITLE_FONT_SIZE = 11.0f;
-
-		private final JPanel accountPanel = new JPanel(new BorderLayout(ICON_TEXT_GAP, 0));
+		private final JPanel accountPanel = new JPanel(new BorderLayout(InstanceRowStyle.ICON_TEXT_GAP, 0));
 		private final JLabel avatarLabel = new JLabel();
 		private final JLabel usernameLabel = new JLabel();
 		private final JLabel typeLabel = new JLabel();
-		private final Icon defaultAvatar = SwingHelper.createIcon(Launcher.class, "default_skin.png", 32, 32);
+		private final Icon defaultAvatar = SwingHelper.createIcon(Launcher.class, "default_skin.png",
+				InstanceRowStyle.ICON_SIZE, InstanceRowStyle.ICON_SIZE);
 
 		public AccountRenderer() {
 			super(new BorderLayout());
 			setOpaque(true);
-			setBorder(new EmptyBorder(3, 2, 3, 2));
+			setBorder(new EmptyBorder(
+					InstanceRowStyle.VERTICAL_INSET, InstanceRowStyle.SIDE_INSET,
+					InstanceRowStyle.VERTICAL_INSET, InstanceRowStyle.SIDE_INSET));
 
 			accountPanel.setOpaque(false);
-			accountPanel.setBorder(new EmptyBorder(4, 6, 4, 6));
+			accountPanel.setBorder(new EmptyBorder(
+					0, InstanceRowStyle.HORIZONTAL_INSET, 0, InstanceRowStyle.HORIZONTAL_INSET));
 
 			avatarLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			avatarLabel.setVerticalAlignment(SwingConstants.CENTER);
 			avatarLabel.setOpaque(false);
-			Dimension avatarSize = new Dimension(AVATAR_SIZE, AVATAR_SIZE);
+			Dimension avatarSize = new Dimension(InstanceRowStyle.ICON_SIZE, InstanceRowStyle.ICON_SIZE);
 			avatarLabel.setPreferredSize(avatarSize);
 			avatarLabel.setMinimumSize(avatarSize);
-			avatarLabel.setMaximumSize(new Dimension(AVATAR_SIZE, Integer.MAX_VALUE));
+			avatarLabel.setMaximumSize(new Dimension(InstanceRowStyle.ICON_SIZE, Integer.MAX_VALUE));
 
 			usernameLabel.setFont(InstanceRowStyle.titleFont());
 			usernameLabel.setOpaque(false);
 
-			typeLabel.setFont(typeLabel.getFont().deriveFont(Font.PLAIN, SUBTITLE_FONT_SIZE));
+			typeLabel.setFont(typeLabel.getFont().deriveFont(Font.PLAIN, InstanceRowStyle.SUBTITLE_FONT_SIZE));
 			typeLabel.setOpaque(false);
 
 			accountPanel.add(avatarLabel, BorderLayout.WEST);
@@ -742,7 +703,7 @@ public class AccountSelectDialog extends JDialog {
 
 			constraints = (GridBagConstraints) constraints.clone();
 			constraints.gridy = 1;
-			constraints.insets = new Insets(TITLE_SUBTITLE_GAP, 0, 0, 0);
+			constraints.insets = new Insets(InstanceRowStyle.TITLE_SUBTITLE_GAP, 0, 0, 0);
 			textPanel.add(typeLabel, constraints);
 
 			return textPanel;

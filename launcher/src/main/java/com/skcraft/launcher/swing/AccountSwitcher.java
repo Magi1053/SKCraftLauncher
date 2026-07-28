@@ -183,7 +183,7 @@ public class AccountSwitcher extends JPanel {
         }
         Graphics2D g2 = (Graphics2D) g.create();
         try {
-            g2.setColor(getHoverBackground());
+            g2.setColor(InstanceRowStyle.hoverBackground());
             g2.fillRect(0, 0, getWidth(), getHeight());
         } finally {
             g2.dispose();
@@ -289,18 +289,4 @@ public class AccountSwitcher extends JPanel {
         }
     }
 
-    private static Color getHoverBackground() {
-        // Same source as InstanceTableCellRenderer.getHoverBackground.
-        Color hover = UIManager.getColor("Table.selectionBackground");
-        if (hover == null) {
-            hover = UIManager.getColor("List.selectionBackground");
-        }
-        if (hover == null) {
-            hover = UIManager.getColor("Component.accentColor");
-        }
-        if (hover == null) {
-            hover = Color.GRAY;
-        }
-        return new Color(hover.getRed(), hover.getGreen(), hover.getBlue(), InstanceRowStyle.HOVER_ALPHA);
-    }
 }

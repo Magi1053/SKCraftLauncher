@@ -113,7 +113,7 @@ public class Runner implements Callable<Process>, ProgressObservable {
         builder = new JavaProcessBuilder();
         assetsRoot = launcher.getAssets();
 
-        // Load manifiests
+        // Load manifests
         versionManifest = mapper.readValue(instance.getVersionPath(), VersionManifest.class);
 
         // Load assets index

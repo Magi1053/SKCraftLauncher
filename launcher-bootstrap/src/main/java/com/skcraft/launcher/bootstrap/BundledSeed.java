@@ -1,7 +1,6 @@
 package com.skcraft.launcher.bootstrap;
 
 import java.io.IOException;
-import java.net.URL;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,8 +14,7 @@ import java.util.logging.Logger;
  * launcher JAR by its timestamped filename. AppImage and Flatpak payloads keep
  * {@code app/launcher-bootstrap.jar} beside {@code bootstrap/launcher} and
  * {@code bootstrap/natives}; DEB uses the same layout but normally seeds it
- * from
- * its post-install script.
+ * from its post-install script.
  */
 public final class BundledSeed {
 
@@ -53,10 +51,9 @@ public final class BundledSeed {
 
     private static Path findBundledRoot(Class<?> anchor) {
         try {
-            URL location = anchor.getProtectionDomain().getCodeSource().getLocation();
-            if (location != null) {
-                Path locationPath = Path.of(location.toURI());
-                Path candidate = Files.isRegularFile(locationPath) ? locationPath.getParent() : locationPath;
+            java.io.File codeSourceBaseDir = BootstrapUtils.resolveCodeSourceBaseDir(anchor);
+            if (codeSourceBaseDir != null) {
+                Path candidate = codeSourceBaseDir.toPath();
                 for (int level = 0; candidate != null && level <= MAX_PARENT_LEVELS; level++) {
                     if (isBundledRoot(candidate)) {
                         return candidate;

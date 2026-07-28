@@ -26,6 +26,7 @@ import com.skcraft.launcher.util.SwingExecutor;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -122,6 +123,9 @@ public class GenerateListingController {
         });
 
         dialog.getListingTypeCombo().addItemListener(e -> {
+            if (e.getStateChange() != ItemEvent.SELECTED) {
+                return;
+            }
             ListingType type = (ListingType) e.getItem();
             dialog.getGameKeyWarning().setVisible(!type.isGameKeyCompatible());
         });
@@ -170,7 +174,7 @@ public class GenerateListingController {
         destDir.mkdirs();
         File file = new File(destDir, listingType.getFilename());
 
-        workspace.setPackageListingEntries(selected);
+        workspace.setPackageListingEntries(manifestEntries);
         workspace.setPackageListingType(listingType);
         Persistence.commitAndForget(workspace);
 

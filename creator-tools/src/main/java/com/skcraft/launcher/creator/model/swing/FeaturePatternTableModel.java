@@ -29,6 +29,8 @@ public class FeaturePatternTableModel extends AbstractTableModel {
                 return "Recommendation";
             case 2:
                 return "Default?";
+            case 3:
+                return "Min Memory Increase";
             default:
                 return null;
         }
@@ -43,6 +45,8 @@ public class FeaturePatternTableModel extends AbstractTableModel {
                 return String.class;
             case 2:
                 return String.class;
+            case 3:
+                return Integer.class;
             default:
                 return null;
         }
@@ -64,7 +68,7 @@ public class FeaturePatternTableModel extends AbstractTableModel {
 
     @Override
     public int getColumnCount() {
-        return 3;
+        return 4;
     }
 
     @Override
@@ -76,6 +80,8 @@ public class FeaturePatternTableModel extends AbstractTableModel {
                 return features.get(rowIndex).getFeature().getRecommendation();
             case 2:
                 return features.get(rowIndex).getFeature().isSelected() ? "Yes" : "";
+            case 3:
+                return features.get(rowIndex).getFeature().getMinMemoryDelta();
             default:
                 return null;
         }

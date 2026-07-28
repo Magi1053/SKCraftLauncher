@@ -7,11 +7,9 @@
 package com.skcraft.launcher.bootstrap;
 
 import lombok.NonNull;
-import lombok.extern.java.Log;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -27,7 +25,6 @@ import static com.skcraft.launcher.bootstrap.SharedLocale.tr;
 /**
  * Swing utility methods.
  */
-@Log
 public final class SwingHelper {
 
     private SwingHelper() {
@@ -52,7 +49,7 @@ public final class SwingHelper {
     }
 
     /**
-     * Shows an popup error dialog, with potential extra details shown either immediately
+     * Shows a popup error dialog, with potential extra details shown either immediately
      * or available on the dialog.
      *
      * @param parentComponent the frame from which the dialog is displayed, otherwise
@@ -67,7 +64,7 @@ public final class SwingHelper {
     }
 
     /**
-     * Shows an popup error dialog, with potential extra details shown either immediately
+     * Shows a popup error dialog, with potential extra details shown either immediately
      * or available on the dialog.
      *
      * @param parentComponent the frame from which the dialog is displayed, otherwise
@@ -215,25 +212,6 @@ public final class SwingHelper {
         if (image != null) {
             frame.setIconImage(image);
         }
-    }
-
-    /**
-     * Focus a component.
-     *
-     * <p>The focus call happens in {@link javax.swing.SwingUtilities#invokeLater(Runnable)}.</p>
-     * 
-     * @param component the component
-     */
-    public static void focusLater(@NonNull final Component component) {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                if (component instanceof JTextComponent) {
-                    ((JTextComponent) component).selectAll();
-                }
-                component.requestFocusInWindow();
-            }
-        });
     }
 
 }
