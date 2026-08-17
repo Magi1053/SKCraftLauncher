@@ -70,7 +70,8 @@ if defined JDK17_HOME if exist "%JDK17_HOME%\bin\java.exe" (
 )
 
 if defined JAVA_HOME if exist "%JAVA_HOME%\bin\java.exe" (
-    exit /b 0
+    findstr /R "JAVA_VERSION=.17" "%JAVA_HOME%\release" >nul 2>&1
+    if not errorlevel 1 exit /b 0
 )
 
 for /d %%J in ("C:\Program Files\Amazon Corretto\jdk17*") do (

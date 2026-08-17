@@ -72,6 +72,15 @@ public final class BrowserFallbackPanels {
         return centered(content);
     }
 
+    public static JPanel buildErrorPanel(String message) {
+        JPanel content = new JPanel(new MigLayout("insets 12, wrap 1", "[center]", "[]"));
+        content.setOpaque(false);
+        content.add(new JLabel("<html><div style=\"width: 320px; text-align: center;\">"
+                + SwingHelper.htmlEscape(message)
+                + "</div></html>"));
+        return centered(content);
+    }
+
     private static JPanel centered(JPanel content) {
         JPanel panel = new JPanel(new GridBagLayout());
         SwingHelper.applyTableBackground(panel);

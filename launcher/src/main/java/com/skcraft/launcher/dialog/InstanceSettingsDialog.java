@@ -59,6 +59,7 @@ public class InstanceSettingsDialog extends JDialog {
 	private final JCheckBox modpackJvmArgsCheck = new JCheckBox(
 			SharedLocale.tr("instance.options.useModpackJvmArguments"));
 	private final JTextArea combinedJavaArgsText = new JTextArea(3, 30);
+	private final JScrollPane combinedJavaArgsScroll = new JScrollPane(combinedJavaArgsText);
 
 	private final LinedBoxPanel buttonsPanel = new LinedBoxPanel(true);
 	private final JButton okButton = new JButton(SharedLocale.tr("button.save"));
@@ -296,11 +297,17 @@ public class InstanceSettingsDialog extends JDialog {
 		memorySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.minMemory")), minMemorySpinner);
 		memorySettingsPanel.addRow(new JLabel(SharedLocale.tr("options.maxMemory")), maxMemorySpinner);
 
+		runtimePanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 10));
 		runtimePanel.addRow(new JLabel(SharedLocale.tr("instance.options.userJvmArguments")));
 		runtimePanel.addRow(userJavaArgsScroll);
 		runtimePanel.addRow(modpackJvmArgsCheck);
-		runtimePanel.addRow(new JLabel(SharedLocale.tr("instance.options.combinedJvmArguments")));
-		runtimePanel.addRow(combinedJavaArgsText);
+
+		JPanel effectiveArgsPanel = new JPanel(new BorderLayout(0, 4));
+		effectiveArgsPanel.setOpaque(false);
+		effectiveArgsPanel.setBorder(BorderFactory.createEmptyBorder(7, 22, 8, 22));
+		effectiveArgsPanel.add(new JLabel(SharedLocale.tr("instance.options.combinedJvmArguments")),
+				BorderLayout.NORTH);
+		effectiveArgsPanel.add(combinedJavaArgsScroll, BorderLayout.CENTER);
 
 		okButton.setMargin(new Insets(0, 10, 0, 10));
 		buttonsPanel.addGlue();
@@ -316,11 +323,15 @@ public class InstanceSettingsDialog extends JDialog {
 
 		cancelButton.addActionListener(e -> dispose());
 
+		formsPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
 		formsPanel.addElement(memorySettingsPanel);
 		formsPanel.addElement(runtimePanel);
 
 		add(formsPanel, BorderLayout.NORTH);
+		add(effectiveArgsPanel, BorderLayout.CENTER);
 		add(buttonsPanel, BorderLayout.SOUTH);
+
+		getRootPane().setDefaultButton(okButton);
 
 		initJvmArgsInputs();
 	}
@@ -340,6 +351,13 @@ public class InstanceSettingsDialog extends JDialog {
 		combinedJavaArgsText.setFont(UIManager.getFont("Label.font"));
 		combinedJavaArgsText.setOpaque(false);
 		combinedJavaArgsText.setBorder(BorderFactory.createEmptyBorder());
+
+		combinedJavaArgsScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+		combinedJavaArgsScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+		combinedJavaArgsScroll.setOpaque(false);
+		combinedJavaArgsScroll.getViewport().setOpaque(false);
+		combinedJavaArgsScroll.setBorder(BorderFactory.createEmptyBorder());
+		combinedJavaArgsScroll.setViewportBorder(BorderFactory.createEmptyBorder());
 	}
 
 	private void initActions() {

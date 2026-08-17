@@ -37,6 +37,12 @@ subprojects {
         workingDir = new File(rootDir, "run/")
         workingDir.mkdirs()
     }
+
+    plugins.withId('com.gradleup.shadow') {
+        tasks.named('shadowJar') { archiveClassifier.set('') }
+        tasks.named('jar') { archiveClassifier.set('thin') }
+        tasks.named('build') { dependsOn tasks.named('shadowJar') }
+    }
 }
 
 tasks.register('package') {

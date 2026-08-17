@@ -34,6 +34,7 @@ public final class LauncherLookAndFeel {
 
     private static final String CUSTOM_DEFAULTS_SOURCE = "com.skcraft.launcher.theme";
     private static boolean clickToClearFocusInstalled;
+    private static boolean clearDialogOpenFocusInstalled;
     private static boolean escapeToCloseDialogInstalled;
 
     private LauncherLookAndFeel() {
@@ -57,6 +58,7 @@ public final class LauncherLookAndFeel {
             }
         }
         installClickToClearFocus();
+        installClearDialogOpenFocus();
         installEscapeToCloseDialog();
     }
 
@@ -83,6 +85,35 @@ public final class LauncherLookAndFeel {
             KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
         }, AWTEvent.MOUSE_EVENT_MASK);
         clickToClearFocusInstalled = true;
+    }
+
+    private static synchronized void installClearDialogOpenFocus() {
+        if (clearDialogOpenFocusInstalled) {
+            return;
+        }
+
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            if (!(event instanceof WindowEvent) || event.getID() != WindowEvent.WINDOW_OPENED) {
+                return;
+            }
+
+            Window window = ((WindowEvent) event).getWindow();
+            if (!(window instanceof JDialog) || !window.isDisplayable()) {
+                return;
+            }
+
+            // After Swing assigns initial focus to first focusable child.
+            SwingUtilities.invokeLater(() -> {
+                if (!window.isDisplayable()) {
+                    return;
+                }
+                KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+                if (manager.getActiveWindow() == window) {
+                    manager.clearGlobalFocusOwner();
+                }
+            });
+        }, AWTEvent.WINDOW_EVENT_MASK);
+        clearDialogOpenFocusInstalled = true;
     }
 
     private static synchronized void installEscapeToCloseDialog() {

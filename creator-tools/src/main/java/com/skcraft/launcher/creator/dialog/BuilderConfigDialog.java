@@ -81,8 +81,6 @@ public class BuilderConfigDialog extends JDialog {
         setLocationRelativeTo(parent);
 
         copyFrom();
-
-        nameText.requestFocus();
     }
 
     private void initComponents() {

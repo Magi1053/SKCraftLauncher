@@ -109,6 +109,8 @@ public final class BootstrapFileLogging {
             copy.setSequenceNumber(source.getSequenceNumber());
             copy.setSourceClassName(source.getSourceClassName());
             copy.setSourceMethodName(source.getSourceMethodName());
+            copy.setMillis(source.getMillis());
+            copy.setThreadID(source.getThreadID());
             copy.setThrown(source.getThrown());
             Object[] parameters = source.getParameters();
             copy.setParameters(parameters != null ? parameters.clone() : null);

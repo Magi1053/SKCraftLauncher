@@ -14,6 +14,7 @@ import com.skcraft.launcher.browser.BrowserFallbackPanels;
 import com.skcraft.launcher.browser.BrowserView;
 import com.skcraft.launcher.browser.platform.BrowserPlatform;
 import com.skcraft.launcher.swing.SwingHelper;
+import com.skcraft.launcher.util.SharedLocale;
 import lombok.extern.java.Log;
 import net.miginfocom.swing.MigLayout;
 
@@ -51,19 +52,40 @@ public final class WebliteWebpageView extends JPanel implements BrowserView {
     private static final String BROWSER_CARD = "browser";
     private static final String ERROR_CARD = "error";
 
-    private static final String EXTERNAL_LINK_SCRIPT = "(function() {" +
-            "document.addEventListener('click', function(event) {" +
-            "var link = event.target;" +
-            "while (link && link.tagName !== 'A') { link = link.parentElement; }" +
-            "if (!link || !link.href) { return; }" +
-            "var target = new URL(link.href, document.baseURI);" +
-            "if (target.protocol !== 'http:' && target.protocol !== 'https:') { return; }" +
-            "var current = window.location.href.split('#')[0];" +
-            "if (target.href.split('#')[0] === current) { return; }" +
+    private static final String EXTERNAL_LINK_SCRIPT = "(() => {" +
+            "const HIDDEN = 'data-skcraft-external-href';" +
+            "const pageUrl = () => location.href.split('#')[0];" +
+            "const suppress = link => {" +
+            "if (!(link instanceof HTMLAnchorElement) || !link.hasAttribute('href')) return;" +
+            "let target;" +
+            "try { target = new URL(link.getAttribute('href'), document.baseURI); }" +
+            "catch { return; }" +
+            "const external = (target.protocol === 'http:' || target.protocol === 'https:') " +
+            "&& target.href.split('#')[0] !== pageUrl();" +
+            "if (!external) { link.removeAttribute(HIDDEN); return; }" +
+            "link.setAttribute(HIDDEN, target.href);" +
+            "link.removeAttribute('href');" +
+            "link.style.cursor ||= 'pointer';};" +
+            "const scan = root => {" +
+            "if (!(root instanceof Element)) return;" +
+            "if (root.matches('a[href]')) suppress(root);" +
+            "root.querySelectorAll('a[href]').forEach(suppress);};" +
+            "new MutationObserver(records => {" +
+            "for (const {type, target, addedNodes} of records) {" +
+            "if (type === 'attributes') suppress(target);" +
+            "else addedNodes.forEach(scan);}" +
+            "}).observe(document, {childList: true, subtree: true, attributes: true, attributeFilter: ['href']});" +
+            "scan(document.documentElement);" +
+            "document.addEventListener('click', event => {" +
+            "const link = event.target.closest?.('a');" +
+            "const href = link?.getAttribute(HIDDEN) || link?.getAttribute('href');" +
+            "if (!href) return;" +
+            "const target = new URL(href, document.baseURI);" +
+            "if (target.protocol !== 'http:' && target.protocol !== 'https:') return;" +
+            "if (target.href.split('#')[0] === pageUrl()) return;" +
             "event.preventDefault();" +
             "window." + OPEN_EXTERNAL_CALLBACK + "(target.href);" +
-            "}, true);" +
-            "})();";
+            "}, true);})();";
 
     private final Component parentComponent;
     private final CardLayout cardLayout = new CardLayout();
@@ -282,9 +304,21 @@ public final class WebliteWebpageView extends JPanel implements BrowserView {
             }
 
             try {
+                // Chromium/WebView2 "site can't be reached" uses chrome-error:// and a
+                // full-window interstitial that dwarfs the news panel; swap to Swing.
                 component.evalAsync(
-                        "return document.readyState !== 'loading' " +
-                                "&& window.location.href !== 'about:blank';")
+                        "return (() => {" +
+                                "const href = String(location.href || '');" +
+                                "if (!href || href === 'about:blank' " +
+                                "|| document.readyState === 'loading') return 'loading';" +
+                                "if (href.indexOf('chrome-error:') === 0 " +
+                                "|| href.indexOf('chromewebdata') >= 0) return 'error';" +
+                                "if (document.getElementById('main-frame-error') " +
+                                "|| document.querySelector('.interstitial-wrapper') " +
+                                "|| (document.body && document.body.classList.contains('neterror'))) " +
+                                "return 'error';" +
+                                "return 'ready';" +
+                                "})()")
                         .whenComplete((result, failure) -> SwingUtilities.invokeLater(() -> handleContentReadyResult(
                                 component,
                                 navigation,
@@ -310,7 +344,10 @@ public final class WebliteWebpageView extends JPanel implements BrowserView {
         if (component != webView || navigation != contentNavigation) {
             return;
         }
-        if (failure == null && isJavascriptTrue(result)) {
+        String status = normalizeProbeResult(result);
+        if (failure == null && "error".equals(status)) {
+            showLoadFailed();
+        } else if (failure == null && "ready".equals(status)) {
             scheduleBrowserReveal(component, navigation);
         } else if (attemptsRemaining > 1) {
             scheduleContentReadyCheck(component, navigation, attemptsRemaining - 1);
@@ -345,8 +382,11 @@ public final class WebliteWebpageView extends JPanel implements BrowserView {
         showCard(BROWSER_CARD);
     }
 
-    private static boolean isJavascriptTrue(String result) {
-        return result != null && "true".equalsIgnoreCase(result.replace("\"", "").trim());
+    private static String normalizeProbeResult(String result) {
+        if (result == null) {
+            return "";
+        }
+        return result.replace("\"", "").trim().toLowerCase();
     }
 
     private void openExternalUrl(String argumentsJson) {
@@ -405,6 +445,21 @@ public final class WebliteWebpageView extends JPanel implements BrowserView {
         hideLoading();
         errorPanel.removeAll();
         errorPanel.add(BrowserFallbackPanels.buildUnavailablePanel(parentComponent));
+        applyBackground();
+        showCard(ERROR_CARD);
+        errorPanel.revalidate();
+        errorPanel.repaint();
+    }
+
+    private void showLoadFailed() {
+        WebViewComponent current = webView;
+        if (current != null) {
+            PLATFORM.setContentVisible(current, false);
+        }
+        hideLoading();
+        errorPanel.removeAll();
+        errorPanel.add(BrowserFallbackPanels.buildErrorPanel(
+                SharedLocale.tr("news.panel.loadFailed")));
         applyBackground();
         showCard(ERROR_CARD);
         errorPanel.revalidate();

@@ -10,18 +10,26 @@ import lombok.extern.java.Log;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.logging.*;
 
 @Log
 public final class SimpleLogFormatter extends Formatter {
 
     private static final String LINE_SEPARATOR = System.getProperty("line.separator");
+    private static final DateTimeFormatter TIMESTAMP_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+                    .withZone(ZoneId.systemDefault());
 
     @Override
     public String format(LogRecord record) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("[")
+            .append(TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(record.getMillis())))
+            .append("] [")
             .append(record.getLevel().getLocalizedName().toLowerCase())
             .append("] ")
             .append(formatMessage(record))
