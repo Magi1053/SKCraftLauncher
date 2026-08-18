@@ -477,7 +477,7 @@ public class InstanceSettingsDialog extends JDialog {
 	private boolean save() {
 		int maxMemory = getEffectiveMaxMemory(getEffectiveMinMemory());
 		int systemCap = MemoryRequirements.getPhysicalMemoryCapMb();
-		if (maxMemory > systemCap) {
+		if (systemCap >= 0 && maxMemory > systemCap) {
 			SwingHelper.showErrorDialog(this,
 					SharedLocale.tr("runner.instanceMemoryExceedsSystem",
 							instance.getTitle(),

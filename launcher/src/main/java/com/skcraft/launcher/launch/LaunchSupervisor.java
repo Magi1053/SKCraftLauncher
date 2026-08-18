@@ -332,28 +332,40 @@ public class LaunchSupervisor {
             this.instance = instance;
         }
 
-        static void showInsufficientSystemMemory(Instance instance, int requiredMb, int systemCapMb) {
-            runOnEdt(() -> SwingHelper.showErrorDialog(null,
-                    tr("runner.insufficientSystemMemory",
-                            instance.getTitle(),
-                            MemorySettings.formatMemoryGb(requiredMb),
-                            MemorySettings.formatMemoryGb(systemCapMb)),
-                    tr("launcher.insufficientSystemMemoryTitle")));
+        static boolean confirmInsufficientSystemMemory(
+                Instance instance, int requiredMb, int systemCapMb) {
+            return confirmSystemMemoryWarning(tr("runner.insufficientSystemMemory",
+                    instance.getTitle(),
+                    MemorySettings.formatMemoryGb(requiredMb),
+                    MemorySettings.formatMemoryGb(systemCapMb)));
         }
 
-        static void showInstanceMemoryExceedsSystem(Instance instance, int configuredMb, int systemCapMb) {
-            runOnEdt(() -> SwingHelper.showErrorDialog(null,
-                    tr("runner.instanceMemoryExceedsSystem",
-                            instance.getTitle(),
-                            MemorySettings.formatMemoryGb(configuredMb),
-                            MemorySettings.formatMemoryGb(systemCapMb)),
-                    tr("launcher.insufficientSystemMemoryTitle")));
+        static boolean confirmInstanceMemoryExceedsSystem(
+                Instance instance, int configuredMb, int systemCapMb) {
+            return confirmSystemMemoryWarning(tr("runner.instanceMemoryExceedsSystem",
+                    instance.getTitle(),
+                    MemorySettings.formatMemoryGb(configuredMb),
+                    MemorySettings.formatMemoryGb(systemCapMb)));
         }
 
-        private static void runOnEdt(Runnable action) {
-            ListenableFuture<?> fut = SwingExecutor.INSTANCE.submit(action);
+        private static boolean confirmSystemMemoryWarning(String message) {
+            ListenableFuture<Boolean> fut = SwingExecutor.INSTANCE.submit(() -> {
+                Object[] options = {
+                        tr("button.cancel"),
+                        tr("button.launchAnyway"),
+                };
+                int picked = JOptionPane.showOptionDialog(null,
+                        SwingHelper.htmlWrap(message),
+                        tr("launcher.insufficientSystemMemoryTitle"),
+                        JOptionPane.DEFAULT_OPTION,
+                        JOptionPane.WARNING_MESSAGE,
+                        null,
+                        options,
+                        options[0]);
+                return picked == 1;
+            });
             try {
-                fut.get();
+                return fut.get();
             } catch (ExecutionException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -389,7 +401,6 @@ public class LaunchSupervisor {
                 }
                 return Runner.MemoryVerificationResult.CANCEL;
             });
-
             try {
                 return fut.get();
             } catch (ExecutionException | InterruptedException e) {
