@@ -98,8 +98,8 @@ Windows uninstall behavior:
 - default uninstall keeps user data under `bootstrap/` (`instances/`, `logs/`, `config.json`, `accounts.dat`, etc.)
 - uninstall shows one confirm page with an optional **Delete user data** checkbox (unchecked by default)
 - jpackage binaries (`runtime/`, `app/`, exe) are always removed
-- managed bootstrap caches (`launcher/`, `natives/weblite/`, `natives/flatlaf/`, `temp/`, `webview2/`, `runtimes/`) are always removed
-- Minecraft game files (`assets/`, `libraries/`, `versions/`) are kept
+- managed bootstrap caches (`launcher/`, `natives/weblite/`, `natives/flatlaf/`, `agents/`, `temp/`, `webview2/`, `runtimes/`) are always removed
+- launcher `cache/` (instance icons) and Minecraft game files (`assets/`, `libraries/`, `versions/`) are kept
 - when **Delete user data** is checked, `instances/`, `config.json`, `accounts.dat`, and `logs/` are removed
 
 ### Linux

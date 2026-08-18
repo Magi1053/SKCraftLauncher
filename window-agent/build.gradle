@@ -1,0 +1,28 @@
+plugins {
+    id 'java-library'
+    id 'com.gradleup.shadow'
+}
+
+dependencies {
+    implementation 'org.ow2.asm:asm:9.10.1'
+}
+
+compileJava {
+    options.release = 8
+}
+
+def agentManifest = {
+    attributes(
+            'Premain-Class': 'com.skcraft.launcher.windowagent.WindowAgent',
+            'Can-Redefine-Classes': 'true',
+            'Can-Retransform-Classes': 'true')
+}
+
+jar {
+    manifest agentManifest
+}
+
+shadowJar {
+    manifest agentManifest
+    relocate 'org.objectweb.asm', 'com.skcraft.launcher.windowagent.internal.asm'
+}

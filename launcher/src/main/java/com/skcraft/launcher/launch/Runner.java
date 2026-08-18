@@ -156,10 +156,16 @@ public class Runner implements Callable<Process>, ProgressObservable {
         addLegacyArgs();
 
         callLaunchModifier();
+        LauncherAgents.configure(
+                builder,
+                launcher.getAgentsDir(),
+                versionManifest.getId(),
+                config.isMaximizeWindow());
         verifyMemory();
 
         ProcessBuilder processBuilder = new ProcessBuilder(builder.buildCommand());
         processBuilder.directory(instance.getContentDir());
+        prepareProcessEnvironment(processBuilder, builder.getRuntime());
         Runner.log.info("Launching: " + builder);
         checkInterrupted();
 
@@ -173,6 +179,34 @@ public class Runner implements Callable<Process>, ProgressObservable {
      */
     private void callLaunchModifier() {
         instance.modify(builder);
+    }
+
+    /**
+     * Make the selected runtime authoritative for the child process and remove
+     * inherited option variables that could inject unsupported flags.
+     */
+    static void prepareProcessEnvironment(ProcessBuilder processBuilder, JavaRuntime runtime) {
+        Map<String, String> env = processBuilder.environment();
+        env.remove("_JAVA_OPTIONS");
+        env.remove("JAVA_TOOL_OPTIONS");
+        env.remove("JDK_JAVA_OPTIONS");
+
+        if (runtime == null || runtime.getDir() == null) {
+            return;
+        }
+
+        File javaHome = runtime.getDir().getAbsoluteFile();
+        env.put("JAVA_HOME", javaHome.getPath());
+        env.put("JRE_HOME", javaHome.getPath());
+
+        File bin = new File(javaHome, "bin");
+        if (!bin.isDirectory()) {
+            return;
+        }
+
+        String pathKey = env.containsKey("Path") ? "Path" : "PATH";
+        String current = env.get(pathKey);
+        env.put(pathKey, bin.getAbsolutePath() + File.pathSeparator + (current == null ? "" : current));
     }
 
     private void verifyMemory() {

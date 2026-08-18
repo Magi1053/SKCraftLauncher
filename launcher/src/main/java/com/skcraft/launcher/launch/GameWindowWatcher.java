@@ -88,29 +88,10 @@ public final class GameWindowWatcher {
         return process.isAlive() ? Result.TIMEOUT : Result.PROCESS_DIED;
     }
 
-    /**
-     * Maximize the visible game window belonging to the process tree.
-     *
-     * @param process the launched game process
-     */
-    public static void maximizeGameWindow(Process process) {
-        if (Environment.detectPlatform() != Platform.WINDOWS) {
-            return;
-        }
-
-        try {
-            HWND gameWindow = findGameWindow(process);
-            if (gameWindow != null) {
-                User32.INSTANCE.ShowWindow(gameWindow, WinUser.SW_MAXIMIZE);
-            }
-        } catch (Throwable t) {
-            log.log(Level.WARNING, "Failed to maximize game window", t);
-        }
-    }
-
     private static HWND findGameWindow(Process process) {
         Set<Integer> pids = collectProcessTree((int) process.pid());
         AtomicReference<HWND> found = new AtomicReference<HWND>();
+        AtomicReference<Integer> bestArea = new AtomicReference<Integer>(0);
 
         User32.INSTANCE.EnumWindows((hWnd, data) -> {
             IntByReference processId = new IntByReference();
@@ -138,8 +119,12 @@ public final class GameWindowWatcher {
                 return true;
             }
 
-            found.set(hWnd);
-            return false;
+            int area = width * height;
+            if (area > bestArea.get()) {
+                bestArea.set(area);
+                found.set(hWnd);
+            }
+            return true;
         }, null);
 
         return found.get();

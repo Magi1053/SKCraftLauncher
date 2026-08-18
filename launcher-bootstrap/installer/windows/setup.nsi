@@ -1,4 +1,4 @@
-﻿; --- Includes ---
+; --- Includes ---
 
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"

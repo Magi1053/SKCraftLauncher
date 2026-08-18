@@ -13,6 +13,7 @@
 	!insertmacro DeleteManagedBootstrapDir "launcher"
 	!insertmacro DeleteManagedBootstrapDir "runtimes"
 	!insertmacro DeleteManagedBootstrapDir "natives"
+	!insertmacro DeleteManagedBootstrapDir "agents"
 	!insertmacro DeleteManagedBootstrapDir "temp"
 	!insertmacro DeleteManagedBootstrapDir "webview2"
 !macroend

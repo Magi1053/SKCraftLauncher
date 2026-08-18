@@ -7,6 +7,8 @@
 package com.skcraft.launcher.launch;
 
 import com.skcraft.launcher.launch.runtime.JavaRuntime;
+import com.skcraft.launcher.util.Environment;
+import com.skcraft.launcher.util.Platform;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -33,9 +35,17 @@ public class JavaProcessBuilder {
     @Getter @Setter private int maxMemory;
 
     @Getter private final List<File> classPath = new ArrayList<File>();
+    private final List<String> launcherFlags = new ArrayList<String>();
     @Getter private final List<String> flags = new ArrayList<String>();
     @Getter private final List<String> args = new ArrayList<String>();
     @Getter @Setter private String mainClass;
+
+    /**
+     * Launcher-owned JVM flags, kept separate from user and modpack flags.
+     */
+    public List<String> getLauncherFlags() {
+        return launcherFlags;
+    }
 
     private File getJavaBinPath() throws IOException {
         File path = runtime.getDir().getAbsoluteFile();
@@ -54,6 +64,24 @@ public class JavaProcessBuilder {
         }
 
         return path;
+    }
+
+    /**
+     * Prefer {@code javaw.exe} on Windows so the game has no console HWND for
+     * {@link GameWindowWatcher} to mistake as the client window.
+     */
+    static File resolveJavaExecutable(File binDir) {
+        if (Environment.detectPlatform() == Platform.WINDOWS) {
+            File javaw = new File(binDir, "javaw.exe");
+            if (javaw.isFile()) {
+                return javaw;
+            }
+            File javaExe = new File(binDir, "java.exe");
+            if (javaExe.isFile()) {
+                return javaExe;
+            }
+        }
+        return new File(binDir, "java");
     }
 
     public JavaProcessBuilder classPath(File file) {
@@ -87,12 +115,12 @@ public class JavaProcessBuilder {
         List<String> command = new ArrayList<String>();
 
         if (getRuntime() != null) {
-            File javaBinary = new File(getJavaBinPath(), "java");
-            command.add(javaBinary.getAbsolutePath());
+            command.add(resolveJavaExecutable(getJavaBinPath()).getAbsolutePath());
         } else {
             command.add("java");
         }
 
+        command.addAll(launcherFlags);
         command.addAll(flags);
 
         if (minMemory > 0) {

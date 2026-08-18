@@ -101,10 +101,6 @@ public class LaunchProcessHandler implements Function<Process, ProcessConsoleFra
                     throw new RuntimeException(failure.getLocalizedMessage(), failure);
                 }
             } else {
-                if (result == GameWindowWatcher.Result.READY && launcher.getConfig().isMaximizeWindow()) {
-                    GameWindowWatcher.maximizeGameWindow(process);
-                }
-
                 // Dismiss launching dialog before disposing its owner (the launcher frame).
                 markReady(process);
                 disposeLauncherIfRunning(process, result);

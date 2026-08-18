@@ -13,6 +13,15 @@ apply from: rootProject.file('gradle/browser-runtime.gradle')
 
 configureLauncherBrowser()
 
+evaluationDependsOn(':window-agent')
+def windowAgentJar = project(':window-agent').tasks.named('shadowJar')
+
+// Shadow explodes nested .jar resources; embed as .bin.
+def embeddedAgents = [
+    'skcraft-window-agent.bin': { windowAgentJar.get().archiveFile.get().asFile },
+    'creeperhost-log4jpatcher.bin': file('third-party/Log4jPatcher-1.0.1.jar'),
+]
+
 dependencies {
     api 'javax.xml.bind:jaxb-api:2.3.1'
     api 'com.fasterxml.jackson.core:jackson-databind:2.13.2.2'
@@ -43,6 +52,14 @@ shadowJar {
 }
 
 processResources {
+    dependsOn windowAgentJar
+    embeddedAgents.each { name, source ->
+        from(source) {
+            into 'com/skcraft/launcher/agents'
+            rename { name }
+        }
+    }
+
     def projectVersion = project.version.toString()
     filesMatching('**/*.properties') {
         filter { it.replace('${project.version}', projectVersion) }

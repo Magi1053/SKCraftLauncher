@@ -174,6 +174,15 @@ public final class Launcher {
     }
 
     /**
+     * Get the directory for cached Java agents extracted from the launcher.
+     *
+     * @return the agents directory
+     */
+    public File getAgentsDir() {
+        return new File(getBaseDir(), "agents");
+    }
+
+    /**
      * Get the directory to store temporary files.
      *
      * @return the temporary directory
