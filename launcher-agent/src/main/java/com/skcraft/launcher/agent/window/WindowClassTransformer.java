@@ -1,4 +1,4 @@
-package com.skcraft.launcher.windowagent;
+package com.skcraft.launcher.agent.window;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -277,7 +277,7 @@ final class WindowClassTransformer implements ClassFileTransformer {
                     super.visitLdcInsn(Type.getObjectType(LWJGL2_DISPLAY));
                     super.visitMethodInsn(
                             Opcodes.INVOKESTATIC,
-                            "com/skcraft/launcher/windowagent/Lwjgl2Maximizer",
+                            "com/skcraft/launcher/agent/window/Lwjgl2Maximizer",
                             "prepare",
                             "(Ljava/lang/Class;)V",
                             false);

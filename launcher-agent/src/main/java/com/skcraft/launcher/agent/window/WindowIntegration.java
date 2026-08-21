@@ -1,22 +1,16 @@
-package com.skcraft.launcher.windowagent;
+package com.skcraft.launcher.agent.window;
 
 import java.lang.instrument.Instrumentation;
 
 /**
  * Launcher-owned window integration loaded before Minecraft and its libraries.
  */
-public final class WindowAgent {
+public final class WindowIntegration {
 
-    private static final String ENABLE_OPTION = "startMaximized";
-
-    private WindowAgent() {
+    private WindowIntegration() {
     }
 
-    public static void premain(String options, Instrumentation instrumentation) {
-        if (!ENABLE_OPTION.equals(options)) {
-            return;
-        }
-
+    public static void install(Instrumentation instrumentation) {
         try {
             instrumentation.addTransformer(new WindowClassTransformer(), false);
             System.out.println("[SKCraft Window Agent] In-process maximization enabled");

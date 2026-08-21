@@ -1,4 +1,4 @@
-package com.skcraft.launcher.windowagent;
+package com.skcraft.launcher.agent.window;
 
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;

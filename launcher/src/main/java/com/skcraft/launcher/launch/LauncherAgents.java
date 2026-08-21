@@ -15,8 +15,8 @@ import java.util.regex.Pattern;
 @Log
 final class LauncherAgents {
 
-    static final String WINDOW_RESOURCE =
-            "/com/skcraft/launcher/agents/skcraft-window-agent.bin";
+    static final String LAUNCHER_AGENT_RESOURCE =
+            "/com/skcraft/launcher/agents/skcraft-launcher-agent.bin";
     static final String LOG4J_RESOURCE =
             "/com/skcraft/launcher/agents/creeperhost-log4jpatcher.bin";
 
@@ -36,9 +36,9 @@ final class LauncherAgents {
                     context -> isLog4jVulnerable(context.gameVersion)
                             && !hasLog4jPatcher(context.existingFlags)),
             new AgentSpec(
-                    "window",
-                    WINDOW_RESOURCE,
-                    "skcraft-window-agent-",
+                    "launcher",
+                    LAUNCHER_AGENT_RESOURCE,
+                    "skcraft-launcher-agent-",
                     "startMaximized",
                     context -> context.maximizeWindow));
 
