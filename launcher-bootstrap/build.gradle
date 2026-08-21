@@ -4,6 +4,11 @@ plugins {
     id 'io.freefair.lombok'
 }
 
+configurations {
+    windowsSigning
+    compileOnly.extendsFrom windowsSigning
+}
+
 def bootstrapProperties = new Properties()
 file('src/main/resources/com/skcraft/launcher/bootstrap.properties').withInputStream {
     bootstrapProperties.load(it)
@@ -54,8 +59,9 @@ tasks.named('run', JavaExec) {
 dependencies {
     implementation 'com.googlecode.json-simple:json-simple:1.1.1'
     implementation 'javax.xml.bind:jaxb-api:2.3.1'
+    windowsSigning 'net.jsign:jsign-core:7.5'
+    windowsSigning 'com.azure:azure-identity:1.18.4'
 }
-
 
 processResources {
     dependsOn ':launcher:processResources'
@@ -67,16 +73,32 @@ processResources {
 
 tasks.register('packageWindows', JavaExec) {
     group = 'distribution'
-    description = 'Build Windows Setup.exe (NSIS) via Java packager.'
+    description = 'Build Windows Setup.exe (NSIS) and portable ZIP via Java packager.'
     dependsOn tasks.named('createWindowsLauncher'), tasks.named('downloadWebView2Bootstrapper')
 
     doFirst {
         if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
             throw new GradleException('packageWindows must be run on Windows.')
         }
+        [
+            windowsSignAzureEndpoint: 'WINDOWS_SIGN_AZURE_ENDPOINT',
+            windowsSignAzureAccount: 'WINDOWS_SIGN_AZURE_ACCOUNT',
+            windowsSignAzureProfile: 'WINDOWS_SIGN_AZURE_PROFILE',
+            windowsSignAzureToken: 'WINDOWS_SIGN_AZURE_TOKEN'
+        ].each { propertyName, environmentName ->
+            if (project.hasProperty(propertyName)) {
+                environment environmentName, project.property(propertyName).toString()
+            }
+        }
+        def azureCliWbin = new File(System.getenv('ProgramFiles') ?: 'C:\\Program Files',
+                'Microsoft SDKs\\Azure\\CLI2\\wbin')
+        if (azureCliWbin.isDirectory()) {
+            def path = System.getenv('PATH') ?: ''
+            environment 'PATH', azureCliWbin.absolutePath + File.pathSeparator + path
+        }
     }
 
-    classpath = sourceSets.main.runtimeClasspath
+    classpath = sourceSets.main.runtimeClasspath + configurations.windowsSigning
     mainClass = 'com.skcraft.launcher.installer.InstallerPackager'
     args 'windows',
             projectDir.absolutePath,

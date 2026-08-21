@@ -1,8 +1,38 @@
 #!/bin/sh
 BUILD_INSTALLER=1
-if [ "$1" = "--no-installer" ] || [ "$1" = "no-installer" ]; then
-    BUILD_INSTALLER=0
-    echo "Skipping native installer packaging."
+VERSION=
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-installer|no-installer)
+            BUILD_INSTALLER=0
+            echo "Skipping native installer packaging."
+            ;;
+        --version=*)
+            VERSION="${1#--version=}"
+            ;;
+        version=*)
+            VERSION="${1#version=}"
+            ;;
+        --version|version)
+            if [ -z "${2:-}" ]; then
+                echo "ERROR: --version requires a value."
+                exit 1
+            fi
+            VERSION="$2"
+            shift
+            ;;
+        *)
+            echo "ERROR: Unknown argument: $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ "$BUILD_INSTALLER" = "1" ] && [ -z "$VERSION" ]; then
+    echo "ERROR: --version is required to package installers (e.g. --version 1.0.0)."
+    exit 1
 fi
 
 install_apt_packages() {
@@ -57,7 +87,13 @@ if [ -n "$MISSING_TOOLS" ]; then
     fi
 fi
 
-./gradlew clean build
+VERSION_ARG=
+if [ -n "$VERSION" ]; then
+    VERSION_ARG="-Pversion=$VERSION"
+    echo "Using version=$VERSION"
+fi
+
+./gradlew clean build $VERSION_ARG
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
     read -p "Press any key to continue..."
@@ -66,7 +102,7 @@ fi
 
 if [ "$BUILD_INSTALLER" = "1" ]; then
     echo "Packaging native installer..."
-    ./gradlew package
+    ./gradlew package $VERSION_ARG
     EXIT_CODE=$?
 fi
 

@@ -69,6 +69,10 @@
 	!define WebView2Bootstrapper "${WindowsInstallerDir}\..\..\build\webview2-runtime\MicrosoftEdgeWebview2Setup.exe"
 !endif
 
+!ifndef InstallerFileVersion
+	!define InstallerFileVersion "${MyAppVersion}.0"
+!endif
+
 !define BootstrapSubdir "bootstrap"
 !define NativesSubdir "natives"
 !define WebView2ClientGuid "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -76,6 +80,13 @@
 
 Unicode true
 Name "${AppName}"
+VIProductVersion "${InstallerFileVersion}"
+VIAddVersionKey /LANG=1033 "ProductName" "${AppName}"
+VIAddVersionKey /LANG=1033 "CompanyName" "${AppName}"
+VIAddVersionKey /LANG=1033 "FileDescription" "${AppName} Setup"
+VIAddVersionKey /LANG=1033 "FileVersion" "${MyAppVersion}"
+VIAddVersionKey /LANG=1033 "ProductVersion" "${MyAppVersion}"
+VIAddVersionKey /LANG=1033 "OriginalFilename" "${SetupFileName}"
 OutFile "${OutputDir}\${SetupFileName}"
 InstallDir "${InstallBaseDir}\${InstallDirName}"
 RequestExecutionLevel user

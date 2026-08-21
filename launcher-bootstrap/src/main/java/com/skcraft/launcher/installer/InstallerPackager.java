@@ -194,7 +194,7 @@ public final class InstallerPackager {
          * Installer artifact file name. Platform is implied by the output folder
          * ({@code installer/windows|linux|macos}), so names are just
          * {@code <packageAppName><extension>} (e.g. {@code .AppImage}, {@code .dmg},
-         * {@code  Setup.exe}).
+         * {@code  Setup.exe}, {@code  Portable.zip}).
          */
         protected String installerFileName(String displayAppName, String extension) {
             return normalizePackageAppName(displayAppName) + extension;

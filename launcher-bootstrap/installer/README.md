@@ -62,7 +62,7 @@ This keeps jpackage `runtime/` separate from game `runtimes/`.
 - NSIS 3 (`makensis.exe` on PATH or installed in Program Files)
 - WebView2 Evergreen bootstrapper is downloaded automatically when building the Windows installer (`downloadWebView2Bootstrapper`)
 
-Build Setup EXE:
+Build Setup EXE and portable ZIP:
 
 ```powershell
 gradlew.bat :launcher-bootstrap:packageWindows -Pversion=1.0.0
@@ -71,6 +71,9 @@ gradlew.bat :launcher-bootstrap:packageWindows -Pversion=1.0.0
 Outputs:
 
 - `launcher-bootstrap/build/installer/windows/<packageAppName> Setup.exe` (for example `Example Launcher Setup.exe`)
+- `launcher-bootstrap/build/installer/windows/<packageAppName>.zip` (for example `Example Launcher.zip`)
+- the portable ZIP stores `<packageAppName>.exe`, `runtime/`, `app/`, and `bootstrap/` at the archive root; extract it into an empty folder, then run the EXE
+- the portable ZIP bundles Java and the launcher seed but does not install shortcuts, registry entries, an uninstaller, or WebView2
 - installed shortcuts and post-install launch target `<packageAppName>.exe` (not `javaw.exe`)
 - launcher data defaults to `%LOCALAPPDATA%\<installDirName>\bootstrap\`
 - required `installBaseDirWindows` in `bootstrap.properties` sets the base directory (`%LOCALAPPDATA%` by default) and supports any `%NAME%` environment variable expanded on the target machine; override it with `-PinstallBaseDir="D:\Launchers"` at build/run time
@@ -101,6 +104,8 @@ Windows uninstall behavior:
 - managed bootstrap caches (`launcher/`, `natives/weblite/`, `natives/flatlaf/`, `agents/`, `temp/`, `webview2/`, `runtimes/`) are always removed
 - launcher `cache/` (instance icons) and Minecraft game files (`assets/`, `libraries/`, `versions/`) are kept
 - when **Delete user data** is checked, `instances/`, `config.json`, `accounts.dat`, and `logs/` are removed
+
+Windows packages are unsigned unless Azure Artifact Signing is configured; see [Optional Authenticode signing](#optional-authenticode-signing).
 
 ### Linux
 
@@ -169,6 +174,42 @@ macOS packages use `packageAppName` for the `.app` bundle name (spaces allowed, 
 DMG packaging overrides jpackage's default `DMGsetup.scpt` with `installer/macos/jpackage-resources/dmg-setup.scpt` so Finder does not open the volume mid-build (default script calls `open theDisk`). The override still adds an Applications alias.
 
 The PKG `postinstall` script replaces the bundled launcher in `~/Library/Application Support/<packageAppNameMac>/` from `bootstrap.properties`. Before seeding, it can migrate legacy data from `$HOME/<legacyHomeFolderMac>` into that Application Support directory; enable it by uncommenting `legacyHomeFolderMac` in `installer/installer.properties`. When omitted, the generated postinstall has no migration step. When enabled, migration deep-merges all files and folders, overwriting conflicts, while obsolete `launcher/` and `swt/` entries are deleted so the package can seed a fresh launcher. It runs by default only when the destination data directory does not yet exist. Set `MIGRATE_LEGACY=1` when installing to force migration into an existing data directory, or `MIGRATE_LEGACY=0` to skip it. The macOS output is unsigned by default. Notarization is intentionally out of scope for this initial workflow.
+
+## Optional Authenticode signing
+
+Signing is optional. `packageWindows` without Azure Artifact Signing settings still produces unsigned Setup.exe and ZIP files. Unsigned installers can trigger Microsoft Defender ML or SmartScreen warnings.
+
+When signing is configured, `packageWindows` Authenticode-signs the jpackage launcher EXE **before** NSIS and the portable ZIP, then signs Setup.exe **after** `makensis`. Both signatures use SHA-256 and the Artifact Signing timestamp service (`http://timestamp.acs.microsoft.com`). Artifact Signing certificates last three days; the timestamp keeps the signature valid after that.
+
+[Microsoft quickstart](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart):
+
+1. Use a **paid** Azure subscription (free, trial, and sponsored subscriptions are not supported).
+2. Create an Artifact Signing account (Basic SKU is enough for occasional releases: about **USD 9.99/month** for 5,000 signatures, then **USD 0.005** each).
+3. Complete **identity validation** in the Azure portal. Billing name and address must match the certificate subject.
+4. Create a **Public Trust** certificate profile and assign **Artifact Signing Certificate Profile Signer** to the account that runs the build.
+5. `az login` on the build machine (or pass a token; see below).
+
+Enable signing for a build:
+
+```powershell
+$env:WINDOWS_SIGN_AZURE_ENDPOINT = "https://eus.codesigning.azure.net"
+$env:WINDOWS_SIGN_AZURE_ACCOUNT = "SKCraft"
+$env:WINDOWS_SIGN_AZURE_PROFILE = "SKCraftLauncher"
+gradlew.bat :launcher-bootstrap:packageWindows "-Pversion=1.0.0"
+```
+
+All three variables are required together. Incomplete configuration fails the task instead of silently skipping. `WINDOWS_SIGN_AZURE_ENDPOINT` may be a host (`eus.codesigning.azure.net`) or a URI; it must match the Artifact Signing account region. Optional `WINDOWS_SIGN_AZURE_TOKEN` supplies a `https://codesigning.azure.net/.default` access token for CI. When it is unset, the packager uses `az login` or an Azure service principal (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET` or certificate). The Gradle task prepends the default Azure CLI install directory to `PATH` if present.
+
+The same settings can be passed as Gradle properties (`windowsSignAzureEndpoint`, `windowsSignAzureAccount`, `windowsSignAzureProfile`, `windowsSignAzureToken`). Prefer environment variables so a token is not retained in shell history. Quote `-Pversion=...` in PowerShell so `1.0.0` is not split into extra task names.
+
+Verify signed artifacts with the Windows SDK:
+
+```powershell
+signtool verify /pa /v "build\installer\windows\Example Launcher Setup.exe"
+signtool verify /pa /v "build\windows-app-image\Example Launcher\Example Launcher.exe"
+```
+
+A new publisher may still see SmartScreen warnings until that signature builds download reputation.
 
 ## Private fork override
 

@@ -2,13 +2,10 @@
 
 Function un.BulkRemoveDir
 	Exch $0
-	Push $1
 	IfFileExists "$0" 0 bulkRemoveDirDone
 	DetailPrint "Removing $0..."
-	nsExec::Exec 'cmd.exe /C rmdir /s /q "$0"'
-	Pop $1
+	RMDir /r "$0"
 	bulkRemoveDirDone:
-	Pop $1
 	Pop $0
 FunctionEnd
 
