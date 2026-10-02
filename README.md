@@ -52,7 +52,7 @@ gradlew.bat build
 
 For native installer packaging:
 
-- Windows: `gradlew.bat :launcher-bootstrap:packageWindows "-Pversion=..."` (NSIS Setup.exe and portable ZIP; unsigned unless Azure Artifact Signing is configured — see [installer README](launcher-bootstrap/installer/README.md#optional-authenticode-signing))
+- Windows: `gradlew.bat :launcher-bootstrap:packageWindows "-Pversion=..."` (NSIS Setup.exe and `{App Name} Portable.zip`; unsigned unless Azure Artifact Signing is configured — see [installer README](launcher-bootstrap/installer/README.md#optional-authenticode-signing))
 - Linux: `./gradlew :launcher-bootstrap:packageLinux -Pversion=...` (AppImage + Flatpak + DEB)
 - Linux from Windows: `build.bat --linux` (WSL hybrid; AppImage + Flatpak + DEB)
 - Linux from Windows + WSL: `gradlew.bat :launcher-bootstrap:packageLinuxWsl -Pversion=... -PwslDistro=Ubuntu`

@@ -65,10 +65,6 @@
 	!define SetupFileName "${AppName} Setup.exe"
 !endif
 
-!ifndef WebView2Bootstrapper
-	!define WebView2Bootstrapper "${WindowsInstallerDir}\..\..\build\webview2-runtime\MicrosoftEdgeWebview2Setup.exe"
-!endif
-
 !ifndef InstallerFileVersion
 	!define InstallerFileVersion "${MyAppVersion}.0"
 !endif
@@ -77,12 +73,14 @@
 !define NativesSubdir "natives"
 !define WebView2ClientGuid "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 !define WebView2BootstrapperFileName "MicrosoftEdgeWebview2Setup.exe"
+!define WebView2BootstrapperUrl "https://go.microsoft.com/fwlink/?linkid=2124703"
 
 Unicode true
 Name "${AppName}"
 VIProductVersion "${InstallerFileVersion}"
 VIAddVersionKey /LANG=1033 "ProductName" "${AppName}"
 VIAddVersionKey /LANG=1033 "CompanyName" "${AppName}"
+VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright ${AppName}"
 VIAddVersionKey /LANG=1033 "FileDescription" "${AppName} Setup"
 VIAddVersionKey /LANG=1033 "FileVersion" "${MyAppVersion}"
 VIAddVersionKey /LANG=1033 "ProductVersion" "${MyAppVersion}"

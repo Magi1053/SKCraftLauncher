@@ -60,7 +60,6 @@ This keeps jpackage `runtime/` separate from game `runtimes/`.
 ### Windows
 
 - NSIS 3 (`makensis.exe` on PATH or installed in Program Files)
-- WebView2 Evergreen bootstrapper is downloaded automatically when building the Windows installer (`downloadWebView2Bootstrapper`)
 
 Build Setup EXE and portable ZIP:
 
@@ -70,8 +69,8 @@ gradlew.bat :launcher-bootstrap:packageWindows -Pversion=1.0.0
 
 Outputs:
 
-- `launcher-bootstrap/build/installer/windows/<packageAppName> Setup.exe` (for example `Example Launcher Setup.exe`)
-- `launcher-bootstrap/build/installer/windows/<packageAppName>.zip` (for example `Example Launcher.zip`)
+- `launcher-bootstrap/build/installer/windows/<packageAppName> Setup.exe` (for example `Example Launcher Setup.exe`) — full copy with the JDK runtime, launcher JAR, and weblite natives
+- `launcher-bootstrap/build/installer/windows/<packageAppName> Portable.zip` (for example `Example Launcher Portable.zip`)
 - the portable ZIP stores `<packageAppName>.exe`, `runtime/`, `app/`, and `bootstrap/` at the archive root; extract it into an empty folder, then run the EXE
 - the portable ZIP bundles Java and the launcher seed but does not install shortcuts, registry entries, an uninstaller, or WebView2
 - installed shortcuts and post-install launch target `<packageAppName>.exe` (not `javaw.exe`)
@@ -88,13 +87,14 @@ Outputs:
 - upgrading from a flat-layout install moves existing root-level data into `bootstrap/` automatically
 - the installer replaces `%LOCALAPPDATA%\<installDirName>\bootstrap\launcher\` when the bundled launcher version is **newer or equal** to what is already installed (preserves self-updated JARs only when installed version is newer)
 - the installer refreshes `%LOCALAPPDATA%\<installDirName>\bootstrap\natives\weblite\` with the bundled host bridge; the launcher can restore a missing or invalid bridge from Maven Central
-- managed caches are installed via **selective extraction**: the installer copies `runtime/`, `app`, the exe, and host weblite bridge on every install; launcher JAR replacement still follows the self-update version policy
+- managed caches are installed via **selective extraction**: the installer copies `runtime/`, `app`, the exe, and host weblite bridge; launcher JAR replacement still follows the self-update version policy
 - installer diagnostics are written to `%LOCALAPPDATA%\<installDirName>\install.log` (copied from the install details list at end of setup; for a full NSIS log including file extraction, run `Setup.exe /LOG="%LOCALAPPDATA%\<installDirName>\install.log"`)
 - when WebView2 is not already installed, the installer shows a **WebView2 Runtime** page with an **Install Microsoft Edge WebView2 Runtime (recommended)** checkbox (checked by default); unchecking skips WebView2 installation and the embedded news panel remains unavailable until WebView2 is installed
-- the bundled WebView2 bootstrapper runs interactively (`/install`) so users see Microsoft's installer UI, after all launcher files, shortcuts, and registry entries are in place
+- setup downloads the WebView2 Evergreen bootstrapper from Microsoft at install time (`curl.exe`) and runs it interactively (`/install`) so users see Microsoft's installer UI, after all launcher files, shortcuts, and registry entries are in place
 - silent install (`/S`) installs WebView2 when missing by default; pass `/SKIPWEBVIEW2=1` to skip or `/INSTALLWEBVIEW2=1` to force installation
-- WebView2 installation is non-blocking: bootstrapper failure or UAC cancellation logs a warning and setup continues
+- WebView2 installation is non-blocking: download failure, missing `curl.exe`, bootstrapper failure, or UAC cancellation logs a warning and setup continues
 - WebView2 is a shared system component and is **not** removed during uninstall; only app-specific WebView2 profile data under `bootstrap/webview2/` (or `$INSTDIR\webview2\` for flat layouts) is removed with managed bootstrap data
+- the news panel can still install WebView2 later if setup skipped it
 
 Windows uninstall behavior:
 

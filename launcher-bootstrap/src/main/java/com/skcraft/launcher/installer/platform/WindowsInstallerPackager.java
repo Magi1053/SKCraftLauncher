@@ -21,7 +21,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 public final class WindowsInstallerPackager extends InstallerPackager.Platform {
-    private static final String WEBVIEW2_BOOTSTRAPPER_FILE = "MicrosoftEdgeWebview2Setup.exe";
 
     @Override
     public void run(String[] args) throws Exception {
@@ -38,23 +37,23 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
         String installDir = normalizeInstallDirName(installDirName);
         String defaultInstallBaseDir = normalizeWindowsInstallBaseDir(installBaseDir);
         String setupFileName = installerFileName(appName, " Setup.exe");
-        String portableFileName = installerFileName(appName, ".zip");
+        String portableFileName = installerFileName(appName, " Portable.zip");
         Path appImageDir = projectDir.resolve("build/windows-app-image").resolve(appName);
         Path outputDir = projectDir.resolve("build/installer/windows");
         Path iconPng = projectDir.resolve("src/main/resources/com/skcraft/launcher/bootstrapper_icon.png");
         Path iconIco = projectDir.resolve("build/tmp/windows/icon.ico");
         Path setupScript = projectDir.resolve("installer/windows/setup.nsi");
-        Path webView2Bootstrapper = projectDir.resolve("build/webview2-runtime").resolve(WEBVIEW2_BOOTSTRAPPER_FILE);
         Path launcherOutput = appImageDir.resolve(appName + ".exe");
 
         ensureExists(appImageDir, "Windows app image not found");
         ensureExists(appImageDir.resolve(DATA_SUBDIR).resolve(LAUNCHER_DIR), "Missing bundled launcher directory");
         ensureExists(appImageDir.resolve(DATA_SUBDIR).resolve("natives").resolve("weblite"),
                 "Missing bundled weblite host bridge");
+        Path runtimeDir = appImageDir.resolve(RUNTIME_DIR);
+        ensureExists(runtimeDir, "Missing Windows runtime image");
         ensureExists(launcherOutput, "Windows launcher executable not found");
         ensureExists(iconPng, "Launcher icon PNG not found");
         ensureExists(setupScript, "NSIS setup script not found");
-        ensureExists(webView2Bootstrapper, "Missing WebView2 bootstrapper");
         ensureExists(projectDir.resolve("installer/installer.properties"),
                 "Installer properties not found");
         Files.createDirectories(outputDir);
@@ -71,10 +70,11 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
         writeIcoFromPng(iconPng, iconIco);
 
         String legacyHomeFolder = readLegacyHomeFolder(projectDir, "legacyHomeFolderWindows");
+        String peVersion = toPeFileVersion(version);
+        String appImagePath = appImageDir.toAbsolutePath().toString();
         Path installerDefines = projectDir.resolve("build/tmp/windows/installer-defines.nsh");
         writeInstallerDefines(installerDefines, legacyHomeFolder, appName, installDir, defaultInstallBaseDir,
-                setupFileName, toPeFileVersion(version), appImageDir.toAbsolutePath().toString(),
-                webView2Bootstrapper.toAbsolutePath().toString());
+                setupFileName, peVersion, appImagePath);
 
         AzureWindowsSigningConfig signingConfig = AzureWindowsSigningConfig.fromEnvironment(System.getenv());
         String signingToken = null;
@@ -90,6 +90,16 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
                         Paths.get(System.getenv("ProgramFiles(x86)"), "NSIS", "makensis.exe"),
                         Paths.get(System.getenv("ProgramFiles"), "NSIS", "makensis.exe")));
 
+        compileAndSignSetup(makensis, projectDir, version, outputDir, iconIco, installerDefines, setupScript,
+                setupOutput, appName + " Setup", signingConfig, signingToken);
+
+        zipDirectoryContents(appImageDir, portableOutput);
+        System.out.println("Windows portable archive written to " + portableOutput);
+    }
+
+    private void compileAndSignSetup(String makensis, Path projectDir, String version, Path outputDir, Path iconIco,
+            Path installerDefines, Path setupScript, Path setupOutput, String programName,
+            AzureWindowsSigningConfig signingConfig, String signingToken) throws Exception {
         List<String> command = new ArrayList<>();
         command.add(makensis);
         command.add("/DMyAppVersion=" + version);
@@ -99,7 +109,7 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
         command.add(setupScript.toAbsolutePath().toString());
         runCommand(command, projectDir, Map.of());
         try {
-            signWindowsPe(setupOutput, appName + " Setup", signingConfig, signingToken);
+            signWindowsPe(setupOutput, programName, signingConfig, signingToken);
         } catch (Exception e) {
             try {
                 Files.deleteIfExists(setupOutput);
@@ -109,9 +119,6 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
             throw e;
         }
         System.out.println("Windows installer written to " + setupOutput);
-
-        zipDirectoryContents(appImageDir, portableOutput);
-        System.out.println("Windows portable archive written to " + portableOutput);
     }
 
     private void signWindowsPe(Path file, String programName, AzureWindowsSigningConfig config, String token)
@@ -162,8 +169,7 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
 
     private void writeInstallerDefines(Path output, String legacyHomeFolder,
             String displayAppName, String installDirName, String installBaseDir, String setupFileName,
-            String installerFileVersion, String appImageDir,
-            String webView2Bootstrapper)
+            String installerFileVersion, String appImageDir)
             throws IOException {
         Files.createDirectories(output.getParent());
         String content = "!define LegacyHomeFolder \"" + escapeNsisDefineValue(legacyHomeFolder) + "\"\r\n"
@@ -172,8 +178,7 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
                 + "!define InstallBaseDir \"" + escapeNsisDefineValue(installBaseDir) + "\"\r\n"
                 + "!define SetupFileName \"" + escapeNsisDefineValue(setupFileName) + "\"\r\n"
                 + "!define InstallerFileVersion \"" + escapeNsisDefineValue(installerFileVersion) + "\"\r\n"
-                + "!define AppImageDir \"" + toNsisPath(appImageDir) + "\"\r\n"
-                + "!define WebView2Bootstrapper \"" + escapeNsisDefinePath(webView2Bootstrapper) + "\"\r\n";
+                + "!define AppImageDir \"" + toNsisPath(appImageDir) + "\"\r\n";
         Files.writeString(output, content, StandardCharsets.UTF_8);
     }
 
@@ -201,12 +206,8 @@ public final class WindowsInstallerPackager extends InstallerPackager.Platform {
         return escapeNsisDefineValue(path.replace('\\', '/'));
     }
 
-    private String escapeNsisDefinePath(String path) {
-        return path.replace("\"", "$\"");
-    }
-
     private String escapeNsisDefineValue(String value) {
-        return value.replace("\\", "$\\").replace("\"", "$\"");
+        return value.replace("$", "$$").replace("\\", "$\\").replace("\"", "$\"");
     }
 
     private String normalizeWindowsInstallBaseDir(String installBaseDir) {

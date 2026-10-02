@@ -111,6 +111,7 @@ FunctionEnd
 
 Function InstallWebView2IfRequested
 	Push $0
+	Push $1
 
 	StrCmp $ShouldInstallWebView2 1 installWebView2CheckInstalled
 	Goto installWebView2Done
@@ -123,10 +124,38 @@ Function InstallWebView2IfRequested
 	Goto installWebView2Done
 
 	installWebView2Start:
-	!insertmacro DetailPrintLog "Installing Microsoft Edge WebView2 Runtime."
+	!insertmacro DetailPrintLog "Downloading Microsoft Edge WebView2 Runtime."
 	InitPluginsDir
 	SetOutPath "$PLUGINSDIR"
-	File "${WebView2Bootstrapper}"
+	Delete "$PLUGINSDIR\${WebView2BootstrapperFileName}"
+
+	IfFileExists "$SYSDIR\curl.exe" installWebView2Download installWebView2NoCurl
+
+	installWebView2NoCurl:
+	!insertmacro DetailPrintLog "curl.exe was not found; skipping WebView2 download."
+	Goto installWebView2RestoreOutPath
+
+	installWebView2Download:
+	nsExec::ExecToLog '"$SYSDIR\curl.exe" --fail --location --silent --show-error --output "${WebView2BootstrapperFileName}" "${WebView2BootstrapperUrl}"'
+	Pop $0
+	StrCmp $0 "error" installWebView2DownloadFailed
+	StrCmp $0 0 installWebView2CheckFile installWebView2DownloadFailed
+
+	installWebView2CheckFile:
+	IfFileExists "$PLUGINSDIR\${WebView2BootstrapperFileName}" 0 installWebView2DownloadFailed
+	ClearErrors
+	FileOpen $1 "$PLUGINSDIR\${WebView2BootstrapperFileName}" r
+	IfErrors installWebView2DownloadFailed
+	FileSeek $1 0 END $0
+	FileClose $1
+	IntCmp $0 0 installWebView2DownloadFailed installWebView2DownloadFailed installWebView2Run
+
+	installWebView2DownloadFailed:
+	!insertmacro DetailPrintLog "Microsoft Edge WebView2 Runtime download failed; continuing."
+	Goto installWebView2RestoreOutPath
+
+	installWebView2Run:
+	!insertmacro DetailPrintLog "Installing Microsoft Edge WebView2 Runtime."
 
 	${If} ${Silent}
 		ExecWait '"$PLUGINSDIR\${WebView2BootstrapperFileName}" /silent /install' $0
@@ -149,8 +178,10 @@ Function InstallWebView2IfRequested
 	!insertmacro DetailPrintLog "Microsoft Edge WebView2 Runtime installer could not be started; continuing."
 
 	installWebView2RestoreOutPath:
+	Delete "$PLUGINSDIR\${WebView2BootstrapperFileName}"
 	SetOutPath "$INSTDIR"
 
 	installWebView2Done:
+	Pop $1
 	Pop $0
 FunctionEnd

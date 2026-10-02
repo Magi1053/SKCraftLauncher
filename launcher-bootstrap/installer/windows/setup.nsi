@@ -70,9 +70,7 @@ Section "${AppName}" SEC_MAIN
 	Call MigrateFlatDataLayout
 	Call DeleteObsoleteNativeCaches
 
-	Call ShouldInstallBundledLauncher
-
-	!insertmacro DetailPrintLog "Extracting application runtime."
+	!insertmacro DetailPrintLog "Extracting application files."
 	SetOutPath "$INSTDIR"
 	File /r "${AppImageDir}\runtime"
 	File /r "${AppImageDir}\app"
@@ -80,6 +78,8 @@ Section "${AppName}" SEC_MAIN
 	!insertmacro LogInstalledPath "$INSTDIR\runtime"
 	!insertmacro LogInstalledPath "$INSTDIR\app"
 	!insertmacro LogInstalledPath "$INSTDIR\${AppExeName}"
+
+	Call ShouldInstallBundledLauncher
 
 	IntCmp $ShouldInstallLauncher 1 installLauncher keepLauncher
 

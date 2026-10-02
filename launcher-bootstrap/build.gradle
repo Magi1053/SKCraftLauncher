@@ -74,7 +74,7 @@ processResources {
 tasks.register('packageWindows', JavaExec) {
     group = 'distribution'
     description = 'Build Windows Setup.exe (NSIS) and portable ZIP via Java packager.'
-    dependsOn tasks.named('createWindowsLauncher'), tasks.named('downloadWebView2Bootstrapper')
+    dependsOn tasks.named('createWindowsLauncher')
 
     doFirst {
         if (!System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
