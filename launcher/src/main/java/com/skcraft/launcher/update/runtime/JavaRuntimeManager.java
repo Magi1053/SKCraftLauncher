@@ -22,7 +22,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
 
 import static com.skcraft.launcher.util.HttpRequest.url;
 import static com.skcraft.launcher.util.SharedLocale.tr;
@@ -54,7 +53,7 @@ public class JavaRuntimeManager {
             return Collections.emptyList();
         }
 
-        Map<Integer, ManagedRuntimeOption> optionsByMajorVersion = new TreeMap<>(Comparator.reverseOrder());
+        List<ManagedRuntimeOption> options = new ArrayList<>();
         for (Map.Entry<String, List<RuntimeInfo>> entry : platformRuntimes.entrySet()) {
             String component = entry.getKey();
             if (!isRuntimeComponent(component) || entry.getValue() == null || entry.getValue().isEmpty()) {
@@ -68,14 +67,13 @@ public class JavaRuntimeManager {
                 continue;
             }
 
-            ManagedRuntimeOption candidate = createManagedRuntimeOption(component, majorVersion, version);
-            ManagedRuntimeOption current = optionsByMajorVersion.get(majorVersion);
-            if (current == null || isPreferredRuntimeChoice(candidate, current)) {
-                optionsByMajorVersion.put(majorVersion, candidate);
-            }
+            options.add(createManagedRuntimeOption(component, majorVersion, version));
         }
 
-        return new ArrayList<>(optionsByMajorVersion.values());
+        options.sort(Comparator
+                .comparingInt(ManagedRuntimeOption::getMajorVersion).reversed()
+                .thenComparing(ManagedRuntimeOption::getComponent, Comparator.reverseOrder()));
+        return options;
     }
 
     private ManagedRuntimeOption createManagedRuntimeOption(String component, int majorVersion, String version) {
@@ -94,30 +92,9 @@ public class JavaRuntimeManager {
         return new ManagedRuntimeOption(component, majorVersion, version, is64Bit, false, null);
     }
 
-    private static boolean isPreferredRuntimeChoice(ManagedRuntimeOption candidate, ManagedRuntimeOption current) {
-        int candidatePriority = getRuntimeComponentPriority(candidate.getComponent());
-        int currentPriority = getRuntimeComponentPriority(current.getComponent());
-        if (candidatePriority != currentPriority) {
-            return candidatePriority < currentPriority;
-        }
-
-        return candidate.getComponent().compareTo(current.getComponent()) > 0;
-    }
-
-    private static int getRuntimeComponentPriority(String component) {
-        if ("jre-legacy".equals(component)) {
-            return 0;
-        }
-
-        if (component.contains("snapshot")) {
-            return 2;
-        }
-
-        return 1;
-    }
-
     private static boolean isRuntimeComponent(String component) {
-        return "jre-legacy".equals(component) || component.startsWith("java-runtime-");
+        return ("jre-legacy".equals(component) || component.startsWith("java-runtime-"))
+                && !component.contains("snapshot");
     }
 
     private static int detectMajorVersion(String version) {

@@ -548,6 +548,9 @@ public class PackManagerController {
             }
         });
 
+        frame.getAccountsMenuItem().addActionListener(e ->
+                AccountSelectDialog.showManageAccounts(frame, launcher));
+
         frame.getOptionsMenuItem().addActionListener(e -> {
             ConfigurationDialog configDialog = new ConfigurationDialog(frame, launcher);
             configDialog.setVisible(true);

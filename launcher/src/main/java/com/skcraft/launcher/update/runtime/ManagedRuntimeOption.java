@@ -17,7 +17,9 @@ public class ManagedRuntimeOption {
 		String versionLabel = version != null && !version.isEmpty()
 				? version
 				: majorVersion > 0 ? formatJavaMajorVersion(majorVersion) : component;
-		return formatLabel(versionLabel, is64Bit, "Mojang");
+		String codeName = formatCodeName(component);
+		String detail = codeName != null ? "Mojang " + codeName : "Mojang";
+		return formatLabel(versionLabel, is64Bit, detail);
 	}
 
 	public static String formatLabel(String version, boolean is64Bit, String detail) {
@@ -32,5 +34,32 @@ public class ManagedRuntimeOption {
 
 	public static String formatJavaMajorVersion(int majorVersion) {
 		return majorVersion == 8 ? "1.8" : String.valueOf(majorVersion);
+	}
+
+	public static String formatCodeName(String component) {
+		if ("jre-legacy".equals(component)) {
+			return "Legacy";
+		}
+		String prefix = "java-runtime-";
+		if (component != null && component.startsWith(prefix) && component.length() > prefix.length()) {
+			String[] parts = component.substring(prefix.length()).split("-");
+			StringBuilder name = new StringBuilder();
+			for (String part : parts) {
+				if (part.isEmpty()) {
+					continue;
+				}
+				if (name.length() > 0) {
+					name.append(' ');
+				}
+				name.append(Character.toUpperCase(part.charAt(0)));
+				if (part.length() > 1) {
+					name.append(part.substring(1));
+				}
+			}
+			if (name.length() > 0) {
+				return name.toString();
+			}
+		}
+		return null;
 	}
 }

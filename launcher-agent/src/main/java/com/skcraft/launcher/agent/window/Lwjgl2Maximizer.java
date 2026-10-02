@@ -14,8 +14,7 @@ import java.util.WeakHashMap;
  */
 public final class Lwjgl2Maximizer {
 
-    private static final Set<Class<?>> APPLIED = Collections.newSetFromMap(
-            new WeakHashMap<Class<?>, Boolean>());
+    private static final Set<Class<?>> APPLIED = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
 
     private Lwjgl2Maximizer() {
     }
@@ -33,43 +32,30 @@ public final class Lwjgl2Maximizer {
                 return;
             }
 
-            Rectangle workArea = GraphicsEnvironment
-                    .getLocalGraphicsEnvironment()
-                    .getMaximumWindowBounds();
+            Rectangle workArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
             if (workArea.width < 400 || workArea.height < 300) {
                 return;
             }
 
             ClassLoader loader = displayClass.getClassLoader();
-            Class<?> displayModeClass = Class.forName(
-                    "org.lwjgl.opengl.DisplayMode", true, loader);
-            Constructor<?> constructor = displayModeClass.getConstructor(
-                    Integer.TYPE, Integer.TYPE);
-            Object displayMode = constructor.newInstance(
-                    Integer.valueOf(workArea.width),
-                    Integer.valueOf(workArea.height));
+            Class<?> displayModeClass = Class.forName("org.lwjgl.opengl.DisplayMode", true, loader);
+            Constructor<?> constructor = displayModeClass.getConstructor(Integer.TYPE, Integer.TYPE);
+            Object displayMode = constructor.newInstance(Integer.valueOf(workArea.width), Integer.valueOf(workArea.height));
 
-            invokeOptional(displayClass, "setResizable", new Class<?>[] { Boolean.TYPE },
-                    new Object[] { Boolean.TRUE });
+            invokeOptional(displayClass, "setResizable", new Class<?>[] { Boolean.TYPE }, new Object[] { Boolean.TRUE });
             Method setDisplayMode = displayClass.getMethod("setDisplayMode", displayModeClass);
             setDisplayMode.invoke(null, displayMode);
-            Method setLocation = displayClass.getMethod(
-                    "setLocation", Integer.TYPE, Integer.TYPE);
-            setLocation.invoke(
-                    null,
-                    Integer.valueOf(workArea.x),
-                    Integer.valueOf(workArea.y));
+            Method setLocation = displayClass.getMethod("setLocation", Integer.TYPE, Integer.TYPE);
+            setLocation.invoke(null, Integer.valueOf(workArea.x), Integer.valueOf(workArea.y));
 
             APPLIED.add(displayClass);
-            System.out.println("[SKCraft Window Agent] Prepared parentless LWJGL 2 display at "
-                    + workArea.width + "x" + workArea.height);
+            System.out.println("[SKCraft Window Agent] Prepared parentless LWJGL 2 display at " + workArea.width + "x" + workArea.height);
         } catch (Throwable t) {
             System.err.println("[SKCraft Window Agent] LWJGL 2 preparation skipped: " + t);
         }
     }
 
-    private static void invokeOptional(
-            Class<?> owner, String name, Class<?>[] parameterTypes, Object[] arguments) {
+    private static void invokeOptional(Class<?> owner, String name, Class<?>[] parameterTypes, Object[] arguments) {
         try {
             owner.getMethod(name, parameterTypes).invoke(null, arguments);
         } catch (NoSuchMethodException ignored) {

@@ -46,6 +46,7 @@ public class PackManagerFrame extends JFrame {
     @Getter private final JMenuItem selectFeaturesMenuItem = new JMenuItem("Optional features...");
     @Getter private final JMenuItem verifyFilesMenuItem = new JMenuItem("Verify files");
     @Getter private final JMenuItem reinstallModsMenuItem = new JMenuItem("Reinstall mods & configs...");
+    @Getter private final JMenuItem accountsMenuItem = new JMenuItem("Test Accounts...");
     @Getter private final JMenuItem optionsMenuItem = new JMenuItem("Test Launcher Options...");
     @Getter private final JMenuItem instanceOptionsMenuItem = new JMenuItem("Test Instance Options...");
     @Getter private final JMenuItem clearInstanceMenuItem = new JMenuItem("Delete Test Launcher Instances");
@@ -171,6 +172,7 @@ public class PackManagerFrame extends JFrame {
         menu.add(verifyFilesMenuItem);
         menu.add(reinstallModsMenuItem);
         menu.addSeparator();
+        menu.add(accountsMenuItem);
         menu.add(optionsMenuItem);
         menu.add(instanceOptionsMenuItem);
         menu.addSeparator();
