@@ -340,14 +340,6 @@ public class LaunchSupervisor {
                     MemorySettings.formatMemoryGb(systemCapMb)));
         }
 
-        static boolean confirmInstanceMemoryExceedsSystem(
-                Instance instance, int configuredMb, int systemCapMb) {
-            return confirmSystemMemoryWarning(tr("runner.instanceMemoryExceedsSystem",
-                    instance.getTitle(),
-                    MemorySettings.formatMemoryGb(configuredMb),
-                    MemorySettings.formatMemoryGb(systemCapMb)));
-        }
-
         private static boolean confirmSystemMemoryWarning(String message) {
             ListenableFuture<Boolean> fut = SwingExecutor.INSTANCE.submit(() -> {
                 Object[] options = {

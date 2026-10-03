@@ -48,6 +48,16 @@ public final class MemoryRequirements {
 		return (int) Math.min(Integer.MAX_VALUE, Math.max(0, totalMb - SYSTEM_HEADROOM_MB));
 	}
 
+	public static MemorySettings.Resolved clampToSystemCapacity(
+			MemorySettings.Resolved configured, int requiredHeapMb, int systemCapMb) {
+		int effectiveRequiredHeapMb = Math.max(requiredHeapMb, configured.getMinMemory());
+		if (systemCapMb < 0 || effectiveRequiredHeapMb > systemCapMb
+				|| configured.getMaxMemory() <= systemCapMb) {
+			return configured;
+		}
+		return MemorySettings.normalize(configured.getMinMemory(), systemCapMb);
+	}
+
 	public static boolean verifyInstanceMemory(Instance instance,
 			BiFunction<Integer, Integer, Runner.MemoryVerificationResult> memoryRequirementMismatch) {
 		int systemCap = getPhysicalMemoryCapMb();
@@ -60,11 +70,14 @@ public final class MemoryRequirements {
 						instance, requiredHeapMb, systemCap)) {
 			return false;
 		}
-		if (systemCap >= 0 && requiredHeapMb <= systemCap
-				&& configured.getMaxMemory() > systemCap
-				&& !LaunchSupervisor.MemoryVerifier.confirmInstanceMemoryExceedsSystem(
-						instance, configured.getMaxMemory(), systemCap)) {
-			return false;
+		MemorySettings.Resolved clamped =
+				clampToSystemCapacity(configured, requiredHeapMb, systemCap);
+		if (clamped.getMaxMemory() != configured.getMaxMemory()) {
+			MemorySettings settings = getOrCreateMemorySettings(instance);
+			settings.setMinMemory(clamped.getMinMemory());
+			settings.setMaxMemory(clamped.getMaxMemory());
+			Persistence.commitAndForget(instance);
+			configured = clamped;
 		}
 		if (launchModifier == null || memoryRequirementMismatch == null) {
 			return true;

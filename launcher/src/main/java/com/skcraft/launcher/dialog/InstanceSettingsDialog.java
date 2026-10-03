@@ -475,17 +475,20 @@ public class InstanceSettingsDialog extends JDialog {
 	}
 
 	private boolean save() {
-		int maxMemory = getEffectiveMaxMemory(getEffectiveMinMemory());
+		int minMemory = getEffectiveMinMemory();
+		int maxMemory = getEffectiveMaxMemory(minMemory);
 		int systemCap = MemoryRequirements.getPhysicalMemoryCapMb();
-		if (systemCap >= 0 && maxMemory > systemCap) {
+		if (systemCap >= 0 && minMemory > systemCap) {
 			SwingHelper.showErrorDialog(this,
-					SharedLocale.tr("runner.instanceMemoryExceedsSystem",
+					SharedLocale.tr("runner.insufficientSystemMemory",
 							instance.getTitle(),
-							MemorySettings.formatMemoryGb(maxMemory),
+							MemorySettings.formatMemoryGb(minMemory),
 							MemorySettings.formatMemoryGb(systemCap)),
 					SharedLocale.tr("launcher.insufficientSystemMemoryTitle"));
 			return false;
 		}
+		MemorySettings.Resolved memory = MemoryRequirements.clampToSystemCapacity(
+				MemorySettings.normalize(minMemory, maxMemory), minMemory, systemCap);
 
 		MemorySettings memorySettings = settings.getMemorySettings();
 		if (memorySettings == null) {
@@ -493,9 +496,8 @@ public class InstanceSettingsDialog extends JDialog {
 			settings.setMemorySettings(memorySettings);
 		}
 
-		int minMemory = getEffectiveMinMemory();
-		memorySettings.setMinMemory(minMemory);
-		memorySettings.setMaxMemory(getEffectiveMaxMemory(minMemory));
+		memorySettings.setMinMemory(memory.getMinMemory());
+		memorySettings.setMaxMemory(memory.getMaxMemory());
 		Object selectedRuntime = javaRuntimeBox.getSelectedItem();
 		if (selectedRuntime == null) {
 			settings.setRuntime(null);

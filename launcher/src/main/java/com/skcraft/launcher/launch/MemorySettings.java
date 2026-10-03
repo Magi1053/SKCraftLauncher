@@ -107,27 +107,32 @@ public class MemorySettings {
 		boolean hadSettings = instance.getSettings().getMemorySettings() != null;
 		MemorySettings settings = getOrCreateSettings(instance);
 		Resolved nextDefaults = normalize(newEffective);
+		int systemCapMb = MemoryRequirements.getPhysicalMemoryCapMb();
+		Resolved updated;
 		if (!hadSettings) {
-			settings.setMinMemory(nextDefaults.getMinMemory());
-			settings.setMaxMemory(nextDefaults.getMaxMemory());
-			return;
+			updated = nextDefaults;
+		} else {
+			Resolved current = normalize(settings.getMinMemory(), settings.getMaxMemory());
+			Resolved previousDefaults = previousEffective == null
+					? normalize(DEFAULT_MIN_MEMORY, DEFAULT_MAX_MEMORY)
+					: normalize(previousEffective);
+			previousDefaults = MemoryRequirements.clampToSystemCapacity(
+					previousDefaults, previousDefaults.getMinMemory(), systemCapMb);
+			int nextMinMemory = current.getMinMemory();
+			int nextMaxMemory = current.getMaxMemory();
+
+			if (nextMinMemory == previousDefaults.getMinMemory()) {
+				nextMinMemory = nextDefaults.getMinMemory();
+			}
+			if (nextMaxMemory == previousDefaults.getMaxMemory()
+					&& nextDefaults.getMaxMemory() > previousDefaults.getMaxMemory()) {
+				nextMaxMemory = nextDefaults.getMaxMemory();
+			}
+			updated = normalize(nextMinMemory, nextMaxMemory);
 		}
 
-		Resolved current = normalize(settings.getMinMemory(), settings.getMaxMemory());
-		Resolved previousDefaults = previousEffective == null
-				? normalize(DEFAULT_MIN_MEMORY, DEFAULT_MAX_MEMORY)
-				: normalize(previousEffective);
-		int nextMinMemory = current.getMinMemory();
-		int nextMaxMemory = current.getMaxMemory();
-
-		if (nextMinMemory == previousDefaults.getMinMemory()) {
-			nextMinMemory = nextDefaults.getMinMemory();
-		}
-		if (nextMaxMemory == previousDefaults.getMaxMemory()
-				&& nextDefaults.getMaxMemory() > previousDefaults.getMaxMemory()) {
-			nextMaxMemory = nextDefaults.getMaxMemory();
-		}
-		Resolved updated = normalize(nextMinMemory, nextMaxMemory);
+		updated = MemoryRequirements.clampToSystemCapacity(
+				updated, updated.getMinMemory(), systemCapMb);
 		settings.setMinMemory(updated.getMinMemory());
 		settings.setMaxMemory(updated.getMaxMemory());
 	}
