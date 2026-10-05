@@ -38,6 +38,11 @@ public class Bootstrap {
     private final String[] originalArgs;
 
     public static void main(String[] args) throws Throwable {
+        // Empty value skips .accessibility.properties; the runtime has no AccessBridge.
+        if (System.getProperty("javax.accessibility.assistive_technologies") == null) {
+            System.setProperty("javax.accessibility.assistive_technologies", "");
+        }
+
         // Must run before any UI so the process matches Start Menu shortcut identity.
         applyAppIdentity();
 

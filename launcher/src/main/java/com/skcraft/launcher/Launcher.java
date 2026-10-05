@@ -494,6 +494,11 @@ public final class Launcher {
      * @param args args
      */
     public static void main(final String[] args) {
+        // Empty value skips .accessibility.properties; the runtime has no AccessBridge.
+        if (System.getProperty("javax.accessibility.assistive_technologies") == null) {
+            System.setProperty("javax.accessibility.assistive_technologies", "");
+        }
+
         setupLogger();
         BrowserBootstrap.prepare(args);
         WindowsAppIdentity.applyIfPresent();
