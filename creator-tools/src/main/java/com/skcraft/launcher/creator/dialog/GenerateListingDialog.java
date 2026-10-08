@@ -29,7 +29,7 @@ public class GenerateListingDialog extends JDialog {
     @Getter private final JTable manifestsTable = new DefaultTable();
     @Getter private final JLabel gameKeyWarning = new JLabel("Selected listing type won't support adding modpacks using 'game keys'.", SwingHelper.createIcon(Creator.class, "warning_icon.png"), SwingConstants.LEFT);
 
-    @Getter private final JButton editManifestButton = new JButton("Modify...");
+    @Getter private final JButton editManifestButton = new JButton("Modify");
 
     @Getter private final JButton generateButton = new JButton("Generate");
     @Getter private final JButton cancelButton = new JButton("Cancel");

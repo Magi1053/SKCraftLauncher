@@ -212,9 +212,9 @@ public class BuilderConfigDialog extends JDialog {
         SwingHelper.removeOpaqueness(container);
         container.setLayout(new MigLayout("fill, insets dialog"));
 
-        JButton newButton = new JButton("New...");
-        JButton editButton = new JButton("Edit...");
-        JButton deleteButton = new JButton("Delete...");
+        JButton newButton = new JButton("New");
+        JButton editButton = new JButton("Edit");
+        JButton deleteButton = new JButton("Delete");
         JButton moveUpButton = new JButton(SwingHelper.createIcon(Creator.class, "move_up.png"));
         JButton moveDownButton = new JButton(SwingHelper.createIcon(Creator.class, "move_down.png"));
         moveUpButton.setToolTipText("Move Up");

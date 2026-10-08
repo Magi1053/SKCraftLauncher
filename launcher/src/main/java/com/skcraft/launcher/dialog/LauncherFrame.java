@@ -401,13 +401,13 @@ public class LauncherFrame extends JFrame {
             });
             popup.add(menuItem);
 
+            popup.addSeparator();
+
             menuItem = new JMenuItem(SharedLocale.tr("instance.openSettings"));
             menuItem.addActionListener(e -> {
                 InstanceSettingsDialog.open(this, launcher, selected);
             });
             popup.add(menuItem);
-
-            popup.addSeparator();
 
             if (instanceHasFeatures(selected)) {
                 menuItem = new JMenuItem(SharedLocale.tr("instance.selectFeatures"));

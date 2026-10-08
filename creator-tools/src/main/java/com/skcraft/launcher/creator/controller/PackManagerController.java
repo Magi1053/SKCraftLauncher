@@ -672,7 +672,7 @@ public class PackManagerController {
         JPopupMenu popup = new JPopupMenu();
         JMenuItem menuItem;
 
-        menuItem = new JMenuItem("Edit modpack.json...");
+        menuItem = new JMenuItem("Edit modpack.json");
         menuItem.addActionListener(e -> frame.getEditConfigMenuItem().doClick());
         popup.add(menuItem);
 
@@ -694,47 +694,47 @@ public class PackManagerController {
         menuItem.addActionListener(e -> frame.getTestOnlineMenuItem().doClick());
         popup.add(menuItem);
 
-        menuItem = new JMenuItem("Instance settings...");
+        popup.addSeparator();
+
+        menuItem = new JMenuItem("Instance settings");
         menuItem.addActionListener(e -> frame.getInstanceOptionsMenuItem().doClick());
         popup.add(menuItem);
 
-        popup.addSeparator();
-
         if (packHasFeatures(pack)) {
-            menuItem = new JMenuItem("Optional features...");
+            menuItem = new JMenuItem("Select optional features");
             menuItem.addActionListener(e -> frame.getSelectFeaturesMenuItem().doClick());
             popup.add(menuItem);
         }
 
-        menuItem = new JMenuItem("Verify files");
+        menuItem = new JMenuItem("Verify Files & Launch");
         menuItem.addActionListener(e -> frame.getVerifyFilesMenuItem().doClick());
         popup.add(menuItem);
 
-        menuItem = new JMenuItem("Reinstall mods & configs...");
+        menuItem = new JMenuItem("Reinstall instance");
         menuItem.addActionListener(e -> frame.getReinstallModsMenuItem().doClick());
         popup.add(menuItem);
 
         popup.addSeparator();
 
-        menuItem = new JMenuItem("Build...");
+        menuItem = new JMenuItem("Build");
         menuItem.addActionListener(e -> frame.getBuildMenuItem().doClick());
         popup.add(menuItem);
 
-        menuItem = new JMenuItem("Deploy Server...");
+        menuItem = new JMenuItem("Deploy Server");
         menuItem.addActionListener(e -> frame.getDeployServerMenuItem().doClick());
         popup.add(menuItem);
 
         popup.addSeparator();
 
-        menuItem = new JMenuItem("Change Location...");
+        menuItem = new JMenuItem("Change Location");
         menuItem.addActionListener(e -> frame.getChangePackLocationMenuItem().doClick());
         popup.add(menuItem);
 
-        menuItem = new JMenuItem("Remove...");
+        menuItem = new JMenuItem("Remove");
         menuItem.addActionListener(e -> frame.getRemovePackItem().doClick());
         popup.add(menuItem);
 
-        menuItem = new JMenuItem("Delete Forever...");
+        menuItem = new JMenuItem("Delete Forever");
         menuItem.addActionListener(e -> frame.getDeletePackItem().doClick());
         popup.add(menuItem);
 

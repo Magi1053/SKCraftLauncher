@@ -29,7 +29,7 @@ public class DirectoryField extends JPanel {
 
         add(Box.createHorizontalStrut(3));
 
-        browseButton = new JButton("Browse...");
+        browseButton = new JButton("Browse");
         browseButton.setPreferredSize(new Dimension(
                 browseButton.getPreferredSize().width,
                 textField.getPreferredSize().height));
