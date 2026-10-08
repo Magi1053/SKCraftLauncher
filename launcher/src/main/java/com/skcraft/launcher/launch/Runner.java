@@ -324,6 +324,51 @@ public class Runner implements Callable<Process>, ProgressObservable {
 
             flags.add(loggingSub.replace(config.getArgument()));
         }
+
+        addNativeAccessFlags(selectedRuntime);
+    }
+
+    /**
+     * Java 24 warns when LWJGL calls {@code System.load}, and a later release
+     * will refuse the call. {@code ALL-UNNAMED} covers classpath libraries.
+     * NeoForge loads LWJGL in a child module layer, which
+     * {@code --enable-native-access} does not reach, so those loads stay allowed.
+     */
+    private void addNativeAccessFlags(JavaRuntime runtime) {
+        if (javaFeatureVersion(runtime) < 24) {
+            return;
+        }
+
+        addLauncherJvmOption("--enable-native-access", "ALL-UNNAMED");
+        addLauncherJvmOption("--illegal-native-access", "allow");
+    }
+
+    private void addLauncherJvmOption(String option, String value) {
+        if (hasJvmOption(builder.getLauncherFlags(), option) || hasJvmOption(builder.getFlags(), option)) {
+            return;
+        }
+        builder.getLauncherFlags().add(option + "=" + value);
+    }
+
+    private static int javaFeatureVersion(JavaRuntime runtime) {
+        if (runtime == null || runtime.getVersion() == null) {
+            return 0;
+        }
+        try {
+            return runtime.getMajorVersion();
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
+    private static boolean hasJvmOption(List<String> flags, String option) {
+        String prefix = option + "=";
+        for (String flag : flags) {
+            if (flag != null && (flag.equals(option) || flag.startsWith(prefix))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
